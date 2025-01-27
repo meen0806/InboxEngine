@@ -6,10 +6,13 @@
     "start": "node src/server.js"
   },
   "dependencies": {
+    "dotenv": "^16.4.7",
     "express": "^4.18.2",
+    "googleapis": "^144.0.0",
     "mongodb": "^6.12.0",
     "mongoose": "^6.8.0",
     "morgan": "^1.10.0",
+    "nodemailer": "^6.10.0",
     "swagger-ui-express": "^5.0.1"
   }
 }

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { validateAccountBeforeSave } = require('../callbacks/accountCallback');
 
 const accountSchema = new mongoose.Schema({
   account: { type: String, required: true },
@@ -17,27 +18,108 @@ const accountSchema = new mongoose.Schema({
   imapIndexer: { type: String, enum: ['full', 'fast'] },
   imap: {
     auth: {
-      user: { type: String, required: true },
-      pass: { type: String, required: true },
+      user: {
+        type: String,
+        validate: {
+          validator: function (value) {
+            return this.oauth2.authorize !== true || !!value;
+          },
+          message: 'IMAP auth.user is required when oauth2.authorize is false',
+        },
+      },
+      pass: {
+        type: String,
+        validate: {
+          validator: function (value) {
+            return this.oauth2.authorize !== true || !!value;
+          },
+          message: 'IMAP auth.pass is required when oauth2.authorize is false',
+        },
+      },
     },
-    host: { type: String, required: true },
-    port: { type: Number, required: true },
-    secure: { type: Boolean, required: true },
+    host: {
+      type: String,
+      validate: {
+        validator: function (value) {
+          return this.oauth2.authorize !== true || !!value;
+        },
+        message: 'IMAP host is required when oauth2.authorize is false',
+      },
+    },
+    port: {
+      type: Number,
+      validate: {
+        validator: function (value) {
+          return this.oauth2.authorize !== true || !!value;
+        },
+        message: 'IMAP port is required when oauth2.authorize is false',
+      },
+    },
+    secure: {
+      type: Boolean,
+      validate: {
+        validator: function (value) {
+          return this.oauth2.authorize !== true || value !== undefined;
+        },
+        message: 'IMAP secure is required when oauth2.authorize is false',
+      },
+    },
   },
   smtp: {
     auth: {
-      user: { type: String, required: true },
-      pass: { type: String, required: true },
+      user: {
+        type: String,
+        validate: {
+          validator: function (value) {
+            return this.oauth2.authorize !== true || !!value;
+          },
+          message: 'SMTP auth.user is required when oauth2.authorize is false',
+        },
+      },
+      pass: {
+        type: String,
+        validate: {
+          validator: function (value) {
+            return this.oauth2.authorize !== true || !!value;
+          },
+          message: 'SMTP auth.pass is required when oauth2.authorize is false',
+        },
+      },
     },
-    host: { type: String, required: true },
-    port: { type: Number, required: true },
-    secure: { type: Boolean, required: true },
+    host: {
+      type: String,
+      validate: {
+        validator: function (value) {
+          return this.oauth2.authorize !== true || !!value;
+        },
+        message: 'SMTP host is required when oauth2.authorize is false',
+      },
+    },
+    port: {
+      type: Number,
+      validate: {
+        validator: function (value) {
+          return this.oauth2.authorize !== true || !!value;
+        },
+        message: 'SMTP port is required when oauth2.authorize is false',
+      },
+    },
+    secure: {
+      type: Boolean,
+      validate: {
+        validator: function (value) {
+          return this.oauth2.authorize !== true || value !== undefined;
+        },
+        message: 'SMTP secure is required when oauth2.authorize is false',
+      },
+    },
   },
   oauth2: {
+    authorize: { type: Boolean },
     clientId: { type: String },
     clientSecret: { type: String },
     redirectUri: { type: String },
-    refreshToken: { type: String },
+    tokens: { type: Object },
   },
   webhooksCustomHeaders: [
     {
@@ -51,5 +133,33 @@ const accountSchema = new mongoose.Schema({
   refreshToken: { type: String },
   createdAt: { type: Date, default: Date.now },
 });
+
+module.exports = mongoose.model('Account', accountSchema);
+
+
+
+accountSchema.pre('save', function (next) {
+  throw new Error('something went wrong');
+
+  // const { verifyAccountCallback } = require('../utils/callbacks');
+
+  // try {
+  //   const result = await verifyAccountCallback(this);
+
+  //   if (result.success) {
+  //     this.state = 'connected';
+  //   } else {
+  //     this.state = 'error';
+  //     this.smtpEhloName = result.message; // Store error message in `smtpEhloName`
+  //   }
+
+  //   next();
+  // } catch (err) {
+  //   next(err);
+  // }
+
+});
+
+
 
 module.exports = mongoose.model('Account', accountSchema);

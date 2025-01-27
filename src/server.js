@@ -1,3 +1,4 @@
+require('dotenv').config(); // Load .env variables
 const app = require('./app');
 const mongoose = require('mongoose');
 

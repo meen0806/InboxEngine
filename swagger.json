@@ -7,12 +7,16 @@
     },
     "host": "localhost:3000",
     "basePath": "/api",
-    "schemes": ["http"],
+    "schemes": [
+      "http"
+    ],
     "paths": {
       "/accounts": {
         "get": {
           "summary": "Get all accounts",
-          "tags": ["Accounts"],
+          "tags": [
+            "Accounts"
+          ],
           "responses": {
             "200": {
               "description": "List of accounts",
@@ -27,7 +31,9 @@
         },
         "post": {
           "summary": "Create a new account",
-          "tags": ["Accounts"],
+          "tags": [
+            "Accounts"
+          ],
           "parameters": [
             {
               "in": "body",
@@ -44,28 +50,124 @@
             }
           }
         }
+      },
+      "/auth/google": {
+        "post": {
+          "summary": "Authenticate with Google",
+          "tags": [
+            "Authentication"
+          ],
+          "parameters": [
+            {
+              "name": "body",
+              "in": "body",
+              "required": true,
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "authCode": {
+                    "type": "string",
+                    "description": "Google authorization code"
+                  }
+                },
+                "required": [
+                  "authCode"
+                ]
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Successful authentication",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/auth/token": {
+        "post": {
+          "summary": "Refresh authentication token",
+          "tags": [
+            "Authentication"
+          ],
+          "parameters": [
+            {
+              "name": "body",
+              "in": "body",
+              "required": true,
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "refreshToken": {
+                    "type": "string",
+                    "description": "Refresh token provided during authentication"
+                  }
+                },
+                "required": [
+                  "refreshToken"
+                ]
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Token refreshed successfully",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "definitions": {
       "Account": {
         "type": "object",
         "properties": {
-          "account": { "type": "string" },
-          "name": { "type": "string" },
-          "email": { "type": "string" },
+          "account": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
           "imap": {
             "type": "object",
             "properties": {
               "auth": {
                 "type": "object",
                 "properties": {
-                  "user": { "type": "string" },
-                  "pass": { "type": "string" }
+                  "user": {
+                    "type": "string"
+                  },
+                  "pass": {
+                    "type": "string"
+                  }
                 }
               },
-              "host": { "type": "string" },
-              "port": { "type": "integer" },
-              "secure": { "type": "boolean" }
+              "host": {
+                "type": "string"
+              },
+              "port": {
+                "type": "integer"
+              },
+              "secure": {
+                "type": "boolean"
+              }
             }
           },
           "smtp": {
@@ -74,17 +176,26 @@
               "auth": {
                 "type": "object",
                 "properties": {
-                  "user": { "type": "string" },
-                  "pass": { "type": "string" }
+                  "user": {
+                    "type": "string"
+                  },
+                  "pass": {
+                    "type": "string"
+                  }
                 }
               },
-              "host": { "type": "string" },
-              "port": { "type": "integer" },
-              "secure": { "type": "boolean" }
+              "host": {
+                "type": "string"
+              },
+              "port": {
+                "type": "integer"
+              },
+              "secure": {
+                "type": "boolean"
+              }
             }
           }
         }
       }
     }
   }
-  

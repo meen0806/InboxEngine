@@ -1,2 +1,4 @@
 node_modules
 .env
+gmail_credentials.json
+example_req.json

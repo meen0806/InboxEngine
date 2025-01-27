@@ -1,5 +1,6 @@
 const Account = require('../models/account');
 const { getOAuthTokens, verifyAccountCredentials } = require('../services/accountService');
+const { verifyAccountCallback } = require('../callbacks/accountCallback');
 
 // List accounts
 exports.listAccounts = async (req, res) => {
@@ -12,24 +13,25 @@ exports.listAccounts = async (req, res) => {
 };
 
 // Create account
+
 exports.createAccount = async (req, res) => {
   try {
-    const { type } = req.body;
+    const newAccount = new Account(req.body);
 
-    if (type === 'gmail' || type === 'outlook') {
-      // Perform OAuth authentication
-      const tokens = await getOAuthTokens(type, req.body);
-      req.body.accessToken = tokens.accessToken;
-      req.body.refreshToken = tokens.refreshToken;
+    // Verify the account before saving
+    const result = await verifyAccountCallback(newAccount);
+    if (!result.success) {
+      return res.status(400).json({ error: result.message });
     }
 
-    const newAccount = new Account(req.body);
     await newAccount.save();
     res.status(201).json(newAccount);
   } catch (err) {
     res.status(400).json({ error: 'Failed to create account', details: err.message });
   }
 };
+
+
 
 // Get account by ID
 exports.getAccountById = async (req, res) => {
