@@ -1,0 +1,90 @@
+{
+    "swagger": "2.0",
+    "info": {
+      "version": "1.0.0",
+      "title": "InboxEngine API",
+      "description": "API documentation for InboxEngine"
+    },
+    "host": "localhost:3000",
+    "basePath": "/api",
+    "schemes": ["http"],
+    "paths": {
+      "/accounts": {
+        "get": {
+          "summary": "Get all accounts",
+          "tags": ["Accounts"],
+          "responses": {
+            "200": {
+              "description": "List of accounts",
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/Account"
+                }
+              }
+            }
+          }
+        },
+        "post": {
+          "summary": "Create a new account",
+          "tags": ["Accounts"],
+          "parameters": [
+            {
+              "in": "body",
+              "name": "body",
+              "required": true,
+              "schema": {
+                "$ref": "#/definitions/Account"
+              }
+            }
+          ],
+          "responses": {
+            "201": {
+              "description": "Account created successfully"
+            }
+          }
+        }
+      }
+    },
+    "definitions": {
+      "Account": {
+        "type": "object",
+        "properties": {
+          "account": { "type": "string" },
+          "name": { "type": "string" },
+          "email": { "type": "string" },
+          "imap": {
+            "type": "object",
+            "properties": {
+              "auth": {
+                "type": "object",
+                "properties": {
+                  "user": { "type": "string" },
+                  "pass": { "type": "string" }
+                }
+              },
+              "host": { "type": "string" },
+              "port": { "type": "integer" },
+              "secure": { "type": "boolean" }
+            }
+          },
+          "smtp": {
+            "type": "object",
+            "properties": {
+              "auth": {
+                "type": "object",
+                "properties": {
+                  "user": { "type": "string" },
+                  "pass": { "type": "string" }
+                }
+              },
+              "host": { "type": "string" },
+              "port": { "type": "integer" },
+              "secure": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    }
+  }
+  
