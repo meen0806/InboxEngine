@@ -23,6 +23,7 @@ const getOAuthTokens = async (type, accountDetails) => {
       expires: 3600,
     };
   }
+  
 
   throw new Error('Unsupported account type for OAuth');
 };
