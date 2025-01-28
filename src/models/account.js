@@ -134,7 +134,7 @@ const accountSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
-module.exports = mongoose.model('Account', accountSchema);
+// module.exports = mongoose.model('Account', accountSchema);
 
 
 

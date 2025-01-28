@@ -1,4 +1,5 @@
 const { google } = require('googleapis');
+const axios = require('axios');
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
@@ -40,4 +41,40 @@ const getTokens = async (code) => {
   }
 };
 
-module.exports = { generateAuthUrl, getTokens };
+
+
+
+const refreshOAuthToken = async (account) => {
+  try {
+    const { oauth2 } = account;
+
+    if (!oauth2 || !oauth2.clientId || !oauth2.clientSecret || !oauth2.refreshToken) {
+      throw new Error('OAuth2 configuration is missing or invalid');
+    }
+
+    const tokenUrl = account.type === 'gmail'
+      ? 'https://oauth2.googleapis.com/token'
+      : 'https://login.microsoftonline.com/common/oauth2/v2.0/token';
+
+    const response = await axios.post(tokenUrl, null, {
+      params: {
+        client_id: oauth2.clientId,
+        client_secret: oauth2.clientSecret,
+        refresh_token: oauth2.refreshToken,
+        grant_type: 'refresh_token',
+      },
+    });
+
+    const tokens = response.data;
+    account.oauth2.tokens = tokens; // Save new tokens
+    await account.save(); // Persist updated tokens to the database
+
+    return tokens.access_token;
+  } catch (err) {
+    throw new Error(`Failed to refresh OAuth token: ${err.message}`);
+  }
+};
+
+
+
+module.exports = { generateAuthUrl, getTokens, refreshOAuthToken };

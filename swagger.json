@@ -1,201 +1,430 @@
 {
-    "swagger": "2.0",
-    "info": {
-      "version": "1.0.0",
-      "title": "InboxEngine API",
-      "description": "API documentation for InboxEngine"
-    },
-    "host": "localhost:3000",
-    "basePath": "/api",
-    "schemes": [
-      "http"
-    ],
-    "paths": {
-      "/accounts": {
-        "get": {
-          "summary": "Get all accounts",
-          "tags": [
-            "Accounts"
-          ],
-          "responses": {
-            "200": {
-              "description": "List of accounts",
-              "schema": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/definitions/Account"
-                }
-              }
-            }
-          }
-        },
-        "post": {
-          "summary": "Create a new account",
-          "tags": [
-            "Accounts"
-          ],
-          "parameters": [
-            {
-              "in": "body",
-              "name": "body",
-              "required": true,
-              "schema": {
-                "$ref": "#/definitions/Account"
-              }
-            }
-          ],
-          "responses": {
-            "201": {
-              "description": "Account created successfully"
+  "swagger": "2.0",
+  "info": {
+    "version": "1.0.0",
+    "title": "InboxEngine API",
+    "description": "API documentation for InboxEngine"
+  },
+  "host": "localhost:3000",
+  "basePath": "/api",
+  "schemes": ["http"],
+  "paths": {
+    "/accounts": {
+      "get": {
+        "summary": "Get all accounts",
+        "tags": ["Accounts"],
+        "responses": {
+          "200": {
+            "description": "List of accounts",
+            "schema": {
+              "type": "array",
+              "items": {"$ref": "#/definitions/Account"}
             }
           }
         }
       },
-      "/auth/google": {
-        "post": {
-          "summary": "Authenticate with Google",
-          "tags": [
-            "Authentication"
-          ],
-          "parameters": [
-            {
-              "name": "body",
-              "in": "body",
-              "required": true,
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "authCode": {
-                    "type": "string",
-                    "description": "Google authorization code"
-                  }
-                },
-                "required": [
-                  "authCode"
-                ]
-              }
-            }
-          ],
-          "responses": {
-            "200": {
-              "description": "Successful authentication",
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "token": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
+      "post": {
+        "summary": "Create a new account",
+        "tags": ["Accounts"],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {"$ref": "#/definitions/Account"}
           }
-        }
-      },
-      "/auth/token": {
-        "post": {
-          "summary": "Refresh authentication token",
-          "tags": [
-            "Authentication"
-          ],
-          "parameters": [
-            {
-              "name": "body",
-              "in": "body",
-              "required": true,
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "refreshToken": {
-                    "type": "string",
-                    "description": "Refresh token provided during authentication"
-                  }
-                },
-                "required": [
-                  "refreshToken"
-                ]
-              }
-            }
-          ],
-          "responses": {
-            "200": {
-              "description": "Token refreshed successfully",
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "token": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
+        ],
+        "responses": {
+          "201": {
+            "description": "Account created successfully"
           }
         }
       }
     },
-    "definitions": {
-      "Account": {
-        "type": "object",
-        "properties": {
-          "account": {
+    "/accounts/{id}": {
+      "get": {
+        "summary": "Get account by ID",
+        "tags": ["Accounts"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account details",
+            "schema": {"$ref": "#/definitions/Account"}
+          }
+        }
+      },
+      "put": {
+        "summary": "Update account",
+        "tags": ["Accounts"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
             "type": "string"
           },
-          "name": {
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {"$ref": "#/definitions/Account"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account updated successfully"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete account",
+        "tags": ["Accounts"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account deleted successfully"
+          }
+        }
+      }
+    },
+    "/accounts/{account}/mailboxes": {
+      "get": {
+        "summary": "Get mailboxes for account",
+        "tags": ["Mailboxes"],
+        "parameters": [
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of mailboxes"
+          }
+        }
+      }
+    },
+    "/accounts/:account/:mailbox/messages": {
+      "get": {
+        "summary": "Get messages for account",
+        "tags": ["Messages"],
+        "parameters": [
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
             "type": "string"
           },
-          "email": {
+          {
+            "name": "mailbox",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of messages"
+          }
+        }
+      },
+      "post": {
+        "summary": "Search messages",
+        "tags": ["Messages"],
+        "parameters": [
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
             "type": "string"
           },
-          "imap": {
-            "type": "object",
-            "properties": {
-              "auth": {
-                "type": "object",
-                "properties": {
-                  "user": {
-                    "type": "string"
-                  },
-                  "pass": {
-                    "type": "string"
+          {
+            "in": "body",
+            "name": "searchCriteria",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "query": {"type": "string"}
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Search results"
+          }
+        }
+      }
+    },
+    "/accounts/{account}/message/{message}": {
+      "get": {
+        "summary": "Get message details",
+        "tags": ["Messages"],
+        "parameters": [
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "message",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Message details"
+          }
+        }
+      }
+    },
+    "/accounts/{account}/messages/delete": {
+      "delete": {
+        "summary": "Delete messages",
+        "tags": ["Messages"],
+        "parameters": [
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Messages deleted successfully"
+          }
+        }
+      }
+    },
+    "/accounts/{account}/attachment/{attachment}": {
+      "get": {
+        "summary": "Get attachment",
+        "tags": ["Attachments"],
+        "parameters": [
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "attachment",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Attachment details"
+          }
+        }
+      }
+    },
+    "/delivery-test/check/{deliveryTest}": {
+      "get": {
+        "summary": "Delivery test",
+        "tags": ["DeliveryTest"],
+        "parameters": [
+          {
+            "name": "deliveryTest",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Delivery test result"
+          }
+        }
+      }
+    },
+    "/accounts/{account}/load-messages": {
+      "post": {
+        "summary": "Load messages for an account",
+        "tags": ["Messages"],
+        "parameters": [
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "description": "The account ID for which messages need to be loaded"
+          },
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "criteria": {
+                  "type": "object",
+                  "description": "Search criteria for loading messages",
+                  "properties": {
+                    "from": { "type": "string", "description": "Filter by sender email" },
+                    "to": { "type": "string", "description": "Filter by recipient email" },
+                    "subject": { "type": "string", "description": "Filter by subject" },
+                    "date": { "type": "string", "format": "date", "description": "Filter by date" }
+                  }
+                },
+                "options": {
+                  "type": "object",
+                  "description": "Options for message loading",
+                  "properties": {
+                    "limit": { "type": "integer", "description": "Limit the number of messages" },
+                    "offset": { "type": "integer", "description": "Offset for pagination" }
                   }
                 }
-              },
-              "host": {
-                "type": "string"
-              },
-              "port": {
-                "type": "integer"
-              },
-              "secure": {
-                "type": "boolean"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Messages loaded successfully",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string", "description": "Message ID" },
+                  "subject": { "type": "string", "description": "Message subject" },
+                  "from": { "type": "string", "description": "Sender email" },
+                  "to": { "type": "string", "description": "Recipient email" },
+                  "date": { "type": "string", "format": "date-time", "description": "Message date" },
+                  "body": { "type": "string", "description": "Message body" }
+                }
               }
             }
           },
-          "smtp": {
-            "type": "object",
-            "properties": {
-              "auth": {
+          "400": {
+            "description": "Bad request"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/accounts/{account}/loadmailboxes": {
+      "post": {
+        "summary": "Fetch and save mailboxes for account",
+        "tags": ["Mailboxes"],
+        "parameters": [
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "description": "Account ID"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Mailboxes fetched and saved successfully",
+            "schema": {
+              "type": "array",
+              "items": {
                 "type": "object",
                 "properties": {
-                  "user": {
-                    "type": "string"
-                  },
-                  "pass": {
-                    "type": "string"
-                  }
+                  "account": { "type": "string" },
+                  "name": { "type": "string" },
+                  "path": { "type": "string" },
+                  "createdAt": { "type": "string", "format": "date-time" }
                 }
-              },
-              "host": {
-                "type": "string"
-              },
-              "port": {
-                "type": "integer"
-              },
-              "secure": {
-                "type": "boolean"
               }
             }
+          },
+          "500": {
+            "description": "Failed to fetch and save mailboxes"
+          }
+        }
+      }
+    },
+    "/oauth/auth-url": {
+      "get": {
+        "summary": "Get OAuth2 authentication URL",
+        "tags": ["OAuth"],
+        "responses": {
+          "200": {
+            "description": "Authentication URL"
+          }
+        }
+      }
+    },
+    "/oauth/callback": {
+      "get": {
+        "summary": "Handle OAuth2 callback",
+        "tags": ["OAuth"],
+        "responses": {
+          "200": {
+            "description": "OAuth2 callback handled successfully"
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "Account": {
+      "type": "object",
+      "properties": {
+        "account": {"type": "string"},
+        "name": {"type": "string"},
+        "email": {"type": "string"},
+        "imap": {
+          "type": "object",
+          "properties": {
+            "auth": {
+              "type": "object",
+              "properties": {
+                "user": {"type": "string"},
+                "pass": {"type": "string"}
+              }
+            },
+            "host": {"type": "string"},
+            "port": {"type": "integer"},
+            "secure": {"type": "boolean"}
+          }
+        },
+        "smtp": {
+          "type": "object",
+          "properties": {
+            "auth": {
+              "type": "object",
+              "properties": {
+                "user": {"type": "string"},
+                "pass": {"type": "string"}
+              }
+            },
+            "host": {"type": "string"},
+            "port": {"type": "integer"},
+            "secure": {"type": "boolean"}
           }
         }
       }
     }
   }
+}

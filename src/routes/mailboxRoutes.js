@@ -1,0 +1,26 @@
+const express = require('express');
+const router = express.Router();
+const {
+  getMailboxes,
+  getMessages,
+  getMessageById,
+  deleteMessages,
+  searchMessages,
+  getAttachment,
+  deliveryTest,
+  loadMessages,
+  loadMailbox,
+} = require('../controllers/mailboxController');
+
+router.get('/:account/mailboxes', getMailboxes);
+router.get('/:account/:mailbox/messages', getMessages);
+router.get('/:account/message/:message', getMessageById);
+router.delete('/:account/messages/delete', deleteMessages);
+router.post('/:account/search', searchMessages);
+router.get('/:account/attachment/:attachment', getAttachment);
+router.get('/delivery-test/check/:deliveryTest', deliveryTest);
+router.post('/:account/load-messages', loadMessages);
+router.post('/:account/loadmailboxes', loadMailbox);
+
+
+module.exports = router;
