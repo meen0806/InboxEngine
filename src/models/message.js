@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 
+
 const messageSchema = new mongoose.Schema({
   account: { type: mongoose.Schema.Types.ObjectId, ref: 'Account', required: true },
   mailbox: { type: mongoose.Schema.Types.ObjectId, ref: 'Mailbox' },

@@ -12,6 +12,7 @@ const { fetchAndSaveMailboxes } = require('../services/mailboxService');
 exports.getMailboxes = async (req, res) => {
   try {
     const { account } = req.params;
+    console.log("params----------------",account)
     const mailboxes = await Mailbox.find({ account });
     res.status(200).json(mailboxes);
   } catch (err) {
@@ -105,12 +106,14 @@ async function runDeliveryTest(deliveryTest) {
 exports.loadMessages = async (req, res) => {
   try {
     const { account } = req.params;
-
+    console.log("params----------------",account)
     // Find the account
     const accountData = await Account.findById(account);
+    console.log("Account",accountData)
     if (!accountData) return res.status(404).json({ error: 'Account not found' });
 
     // Fetch and save messages
+    
     await fetchAndSaveMessages(accountData);
 
     res.status(200).json({ message: 'Messages loaded successfully' });

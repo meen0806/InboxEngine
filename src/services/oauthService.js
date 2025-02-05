@@ -20,7 +20,7 @@ const generateAuthUrl = () => {
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: scopes,
-  });
+  }); 
 
   return authUrl;
 };
