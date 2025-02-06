@@ -106,18 +106,16 @@ async function runDeliveryTest(deliveryTest) {
 exports.loadMessages = async (req, res) => {
   try {
     const { account } = req.params;
-    console.log("params----------------",account)
-    // Find the account
+    const { criteria, options } = req.body; 
     const accountData = await Account.findById(account);
-    console.log("Account",accountData)
     if (!accountData) return res.status(404).json({ error: 'Account not found' });
 
     // Fetch and save messages
-    
-    await fetchAndSaveMessages(accountData);
+    await fetchAndSaveMessages(accountData,criteria);
 
     res.status(200).json({ message: 'Messages loaded successfully' });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Failed to load messages', details: err.message });
   }
 };
@@ -131,7 +129,8 @@ exports.loadMailbox =  async (req, res) => {
     if (!accountDetails) {
       return res.status(404).json({ error: 'Account not found' });
     }
-
+    
+    await accountData.save();
     const mailboxes = await fetchAndSaveMailboxes(accountDetails);
     res.status(201).json({ success: true, mailboxes });
   } catch (error) {

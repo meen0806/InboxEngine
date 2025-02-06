@@ -10,7 +10,7 @@ const STATIC_SEARCH_CRITERIA = [
   new Date("2025-01-01T00:00:00Z").toISOString(),
 ];
 
-const fetchAndSaveMessages = async (account) => {
+const fetchAndSaveMessages = async (account, criteria) => {
   if (account.type === "gmail" || account.type === "outlook") {
     const accessToken = await refreshOAuthToken(account);
     account.imap.auth.accessToken = accessToken;
@@ -51,49 +51,15 @@ const fetchAndSaveMessages = async (account) => {
       try {
         lock = await client.getMailboxLock(mailbox.path);
 
-        Message.findOne()
-          .sort({ createdAt: -1 }) // Sort by createdAt in descending order
-          .then((lastMessage) => {
-            console.log("lastMessage", lastMessage);
-          })
-          .catch((error) => {
-            console.error(error);
-          });
-        const lastFetchedMessage = await Message.findOne({
-          account: account._id,
-          mailbox: mailbox._id,
-        })
-          .sort({ createdAt: -1 }) // Sort by createdAt in descending order
-          .select("date uid");
+        lastDate = criteria.lastFetchedMessage;
 
-        console.log("lastFetchMessage", lastFetchedMessage);
-        const lastFetchedDate = lastFetchedMessage ? lastFetchedMessage.date : new Date(0);
-        const lastFetchedUID = lastFetchedMessage ? lastFetchedMessage.uid : 0;
-
-        // const lastFetchedMessage = await Message.findOne({
-        //   account: account._id,
-        //   mailbox: mailbox._id,
-        //   uid:message.uid
-        // })
-        //   .sort({ date: -1 })
-        //   .select("date")
-        //   // for getting plain Object
-        //   .lean();
-
-        //or can use this approach by sorting the  date
-        //  .sort({ date: -1 })
-        //  .select("date")
-        // Log IDs and last fetched message for debugging.
-        console.log("Account ID:", account._id);
-        console.log("Mailbox ID:", mailbox._id);
-        // console.log("Last fetched message:", lastFetchedMessage);
-
-        const searchCriteria = [
-          "UID",
-          `${lastFetchedUID + 1}:*`, // Fetch messages with UID greater than the last fetched UID
-        ];
-
-        console.log("Search criteria:", searchCriteria);
+        const newMessages = await Message.find({
+          createdAt: { $gt: lastDate },
+        }).sort({ createdAt: -1 });
+        console.log("newMessages", newMessages);
+        const searchCriteria = lastDate
+          ? ["SINCE", lastDate.toUTCString()]
+          : "ALL";
 
         // Fetch messages for this mailbox
         for await (const message of client.fetch(searchCriteria, {
