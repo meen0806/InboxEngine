@@ -23,15 +23,6 @@ exports.createAccount = async (req, res) => {
   try {
     const newAccount = new Account(req.body);
 
-    // Verify the account before saving
-
-    //first task
-
-    // account me save kravne k bad verify krvana hai aur imap error dikhana hai imap ki error
-    //  dikhana hai eroro ko log krvana hai aur user ko dikhana hai
-
-
-    //2. agar email already registered to us case me update vali method chlegi aur account ko verify kregi
     const result = await verifyAccountCallback(newAccount);
     if (!result.success) {
       return res.status(400).json({ error: result.message });

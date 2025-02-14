@@ -51,16 +51,14 @@ const fetchAndSaveMessages = async (account, criteria) => {
       try {
         lock = await client.getMailboxLock(mailbox.path);
 
-        lastDate = criteria.lastFetchedMessage;
+        let lastDate = criteria.lastFetchedMessage ? new Date(criteria.lastFetchedMessage) : null;
 
         const newMessages = await Message.find({
-          createdAt: { $gt: lastDate },
+          createdAt: { $gt:lastDate },
         }).sort({ createdAt: -1 });
-        console.log("newMessages", newMessages);
-        const searchCriteria = lastDate
-          ? ["SINCE", lastDate.toUTCString()]
-          : "ALL";
-
+      
+        const searchCriteria = lastDate ? ["SINCE",  lastDate.toUTCString()] : "ALL";
+      
         // Fetch messages for this mailbox
         for await (const message of client.fetch(searchCriteria, {
           envelope: true,
@@ -75,7 +73,6 @@ const fetchAndSaveMessages = async (account, criteria) => {
             uid: message.uid,
           });
 
-          console.log("existing message", existingMessage);
           if (existingMessage) continue;
 
           // Transform headers to strings
