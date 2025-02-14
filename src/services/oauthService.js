@@ -1,5 +1,6 @@
 const { google } = require('googleapis');
 const axios = require('axios');
+const Account = require("../models/account");
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
@@ -15,11 +16,14 @@ const generateAuthUrl = () => {
     'https://www.googleapis.com/auth/gmail.send',
     'https://www.googleapis.com/auth/gmail.readonly',
     'https://www.googleapis.com/auth/gmail.modify',
+    "https://www.googleapis.com/auth/userinfo.profile",
+    "https://www.googleapis.com/auth/userinfo.email",
   ];
 
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: scopes,
+    prompt: "consent",
   });
 
   return authUrl;
@@ -34,6 +38,44 @@ const getTokens = async (code) => {
     const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
 
+    const oauth2 = google.oauth2({ auth: oauth2Client, version: "v2" });
+    const { data: user } = await oauth2.userinfo.get();
+    let account = await Account.findOne({ email: user.email });
+    if (!account) {
+      account = new Account({
+        email: user.email,
+        name: user.name,
+        oauth2: {
+          authorize: true,
+          clientId: process.env.GOOGLE_CLIENT_ID,
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          redirectUri: process.env.GOOGLE_REDIRECT_URI,
+          tokens: {
+            accessToken: tokens.access_token,
+            refreshToken: tokens.refresh_token || null,
+            expiresIn: tokens.expiry_date || Date.now() + 3600 * 1000,
+            scope: tokens.scope,
+            tokenType: tokens.token_type,
+          },
+        },
+      });
+    } else {
+      account.oauth2 = {
+        authorize: true,
+        clientId: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        redirectUri: process.env.GOOGLE_REDIRECT_URI,
+        tokens: {
+          accessToken: tokens.access_token,
+          refreshToken:
+            tokens.refresh_token || account.oauth2.tokens.refreshToken,
+          expiresIn: tokens.expiry_date || Date.now() + 3600 * 1000,
+          scope: tokens.scope,
+          tokenType: tokens.token_type,
+        },
+      };
+    }
+    await account.save({ validateBeforeSave: false });
     // Here, you can save tokens to the database if needed
     return tokens;
   } catch (error) {
