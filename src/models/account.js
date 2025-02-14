@@ -138,27 +138,27 @@ const accountSchema = new mongoose.Schema({
 
 
 
-accountSchema.pre('save', function (next) {
-  throw new Error('something went wrong');
+// accountSchema.pre('save', function (next) {
+//   throw new Error('something went wrong');
 
-  // const { verifyAccountCallback } = require('../utils/callbacks');
+//   // const { verifyAccountCallback } = require('../utils/callbacks');
 
-  // try {
-  //   const result = await verifyAccountCallback(this);
+//   // try {
+//   //   const result = await verifyAccountCallback(this);
 
-  //   if (result.success) {
-  //     this.state = 'connected';
-  //   } else {
-  //     this.state = 'error';
-  //     this.smtpEhloName = result.message; // Store error message in `smtpEhloName`
-  //   }
+//   //   if (result.success) {
+//   //     this.state = 'connected';
+//   //   } else {
+//   //     this.state = 'error';
+//   //     this.smtpEhloName = result.message; // Store error message in `smtpEhloName`
+//   //   }
 
-  //   next();
-  // } catch (err) {
-  //   next(err);
-  // }
+//   //   next();
+//   // } catch (err) {
+//   //   next(err);
+//   // }
 
-});
+// });
 
 
 
