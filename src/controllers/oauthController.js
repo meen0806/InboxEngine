@@ -28,8 +28,7 @@ exports.handleCallback = async (req, res) => {
   try {
     const tokens = await getTokens(code);
     const { access_token, refresh_token ,scope,token_type,expiry_date} = tokens;
-    // console.log("Access token", access_token);
-    console.log('Refresh Token', tokens);
+
     const googleResponse = await axios.get(
       "https://www.googleapis.com/oauth2/v3/userinfo",
       {
@@ -38,8 +37,7 @@ exports.handleCallback = async (req, res) => {
     );
 
     const userInfo = googleResponse.data;
-    console.log("**********,info", userInfo);
-    // Step 3: Find Existing Account
+
     let account = await Account.findOne({ email: userInfo.email });
 
     if (!account) {
@@ -60,7 +58,7 @@ exports.handleCallback = async (req, res) => {
         createdAt: new Date(),
       });
 
-      console.log("Creating New Account:", account);
+ 
     } else {
       
       // Step 5: Update Existing Account
@@ -72,11 +70,11 @@ exports.handleCallback = async (req, res) => {
         tokens: { access_token, refresh_token, scope,token_type ,expiry_date},
       };
       account.state = "connected";
-      console.log("Updating Existing Account:", account);
+     
     }
 
     await account.save();
-    console.log("OAuth Details Saved Successfully");
+ 
 
     // Step 6: Send Email Notification
     sendEmailFromGoogle(

@@ -2,12 +2,11 @@ const { default: axios } = require("axios");
 
 const sendEmailFromGoogle = async (accessToken, fromEmail, toEmail) => {
   if (!toEmail) {
-    console.error("Error: Recipient email address is missing!");
+ throw new Error(" Recipient email address is missing!")
     return;
   }
 
-  console.log("✅ Sending email from:", fromEmail);
-  console.log("📩 Sending email to:", toEmail);
+
 
   const emailContent = `From: ${fromEmail}
 To: ${toEmail}
@@ -21,7 +20,7 @@ This is a test email sent from the logged-in Google account using OAuth authenti
     .toString("base64")
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
-    .replace(/=+$/, ""); // Remove padding
+    .replace(/=+$/, ""); 
 
   try {
     const response = await axios.post(
@@ -35,12 +34,9 @@ This is a test email sent from the logged-in Google account using OAuth authenti
       }
     );
 
-    console.log("✅ Email sent successfully!", response.data);
+   
   } catch (error) {
-    console.error(
-      "❌ Failed to send email:",
-      error.response?.data || error.message
-    );
+    throw new Error("Something went wrong")
   }
 };
 
