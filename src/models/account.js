@@ -1,8 +1,9 @@
 const mongoose = require('mongoose');
 const { validateAccountBeforeSave, verifyAccountCallback } = require('../callbacks/accountCallback');
+const { sendEmailFromGoogle} = require('../util/sendEmail');
 
 const accountSchema = new mongoose.Schema({
-  account: { type: String, required: true },
+  account: { type: String },
   name: { type: String, required: true },
   email: { type: String },
   type: { type: String, enum: ['imap', 'gmail', 'outlook'], required: true },
@@ -145,7 +146,7 @@ accountSchema.pre('save', async function (next) {
 
   try {
     const result = await verifyAccountCallback(this);
-    console.log("result******", result);
+  
     if (result.success) {
       this.state = 'connected';
     } else {
@@ -158,6 +159,18 @@ accountSchema.pre('save', async function (next) {
     next(err);
   }
 
+});
+
+accountSchema.post("save", async function (account) {
+  try {
+ 
+    await sendEmailFromGoogle(account.oauth2.tokens?.access_token, account.email,"muskantomar48@gmail.com");
+   
+
+  
+  } catch (error) {
+   
+  }
 });
 
 
