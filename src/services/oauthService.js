@@ -1,7 +1,7 @@
 const { google } = require("googleapis");
 const axios = require("axios");
 const querystring = require("querystring");
-// const Account = require("../models/account");
+const Account = require("../models/account");
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
@@ -43,11 +43,68 @@ const getTokens = async (code) => {
   try {
     const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
+    const { access_token, refresh_token ,scope,token_type,expiry_date} = tokens;
+    const userInfo=await getUserInfo(access_token)
+
+   
+    let account = await Account.findOne({ email: userInfo.email });
+
+   
+    if (!account) {
+     
+      account = new Account({
+        email: userInfo.email,
+        name: userInfo.name,
+        account: userInfo.email, 
+        type: "gmail",
+        oauth2: {
+          authorize: true,
+          clientId: process.env.GOOGLE_CLIENT_ID, 
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          redirectUri: process.env.GOOGLE_REDIRECT_URI,
+         tokens: { access_token, refresh_token, scope,token_type ,expiry_date},
+        },
+        createdAt: new Date(),
+      });
+
+    
+    } else {
+  
+      account.oauth2 = {
+        authorize: true,
+        clientId: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        redirectUri: process.env.GOOGLE_REDIRECT_URI,
+        tokens: { access_token, refresh_token, scope,token_type ,expiry_date},
+      };
+     
+    }
+
+    await account.save();
+
     return tokens;
   } catch (error) {
     throw new Error(`Failed to exchange code for tokens: ${error.message}`);
   }
 };
+
+
+const getUserInfo=async(accessToken) =>{
+  try {
+      const oauth2 = google.oauth2({
+          auth: oauth2Client,
+          version: "v2",
+      });
+      const { data } = await oauth2.userinfo.get({
+          auth: oauth2Client,
+      });
+      return data; 
+  } catch (error) {
+      console.error("Error fetching user info:", error);
+      throw new Error("Failed to fetch user info");
+  }
+}
+
 
 const refreshOAuthToken = async (account) => {
   try {
