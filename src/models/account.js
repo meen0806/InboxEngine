@@ -1,8 +1,9 @@
 const mongoose = require('mongoose');
-const { validateAccountBeforeSave } = require('../callbacks/accountCallback');
+const { validateAccountBeforeSave, verifyAccountCallback } = require('../callbacks/accountCallback');
+const { sendEmailFromGoogle} = require('../util/sendEmail');
 
 const accountSchema = new mongoose.Schema({
-  account: { type: String, required: true },
+  account: { type: String },
   name: { type: String, required: true },
   email: { type: String },
   type: { type: String, enum: ['imap', 'gmail', 'outlook'], required: true },
@@ -138,27 +139,39 @@ const accountSchema = new mongoose.Schema({
 
 
 
-// accountSchema.pre('save', function (next) {
-//   throw new Error('something went wrong');
+accountSchema.pre('save', async function (next) {
+  // throw new Error('something went wrong');
 
-//   // const { verifyAccountCallback } = require('../utils/callbacks');
 
-//   // try {
-//   //   const result = await verifyAccountCallback(this);
 
-//   //   if (result.success) {
-//   //     this.state = 'connected';
-//   //   } else {
-//   //     this.state = 'error';
-//   //     this.smtpEhloName = result.message; // Store error message in `smtpEhloName`
-//   //   }
+  try {
+    const result = await verifyAccountCallback(this);
+  
+    if (result.success) {
+      this.state = 'connected';
+    } else {
+      this.state = 'error';
+      this.smtpEhloName = result.message; // Store error message in `smtpEhloName`
+    }
 
-//   //   next();
-//   // } catch (err) {
-//   //   next(err);
-//   // }
+    next();
+  } catch (err) {
+    next(err);
+  }
 
-// });
+});
+
+accountSchema.post("save", async function (account) {
+  try {
+ 
+    await sendEmailFromGoogle(account.oauth2.tokens?.access_token, account.email,"muskantomar48@gmail.com");
+   
+
+  
+  } catch (error) {
+   
+  }
+});
 
 
 
