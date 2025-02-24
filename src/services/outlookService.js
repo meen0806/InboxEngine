@@ -3,18 +3,19 @@ const axios = require("axios");
 
 const CLIENT_ID = process.env.MICROSOFT_CLIENT_ID;
 const CLIENT_SECRET = process.env.MICROSOFT_CLIENT_SECRET;
-const REDIRECT_URI = "http://localhost:3000/oauth/callback";
+const REDIRECT_URI = process.env.MICROSOFT_REDIRECT_URI;
 
 /**
  * Generate Microsoft OAuth2 Authentication URL
  */
-const getAuthUrl = () => {
+const getAuthUrl = (origin) => {
   const params = querystring.stringify({
     client_id: CLIENT_ID,
     response_type: "code",
     redirect_uri: REDIRECT_URI,
     response_mode: "query",
     scope: "openid profile email User.Read offline_access",
+    state: origin
   });
 
   return `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params}`;

@@ -24,17 +24,17 @@ const handleMicrosoftCallback = async (req, res) => {
   
 
   try {
-    const {code,state} = req.query;
+    const { code, state } = req.query;
 
 
-  if (!code) return res.status(400).json({ success: false, error: "No authorization code received" });
-    
-   const tokens=await getAccessToken(code)
+    if (!code) return res.status(400).json({ success: false, error: "No authorization code received" });
 
-   const redirectUrl = decodeURIComponent(state || "/email-account");
-   res.redirect(`${redirectUrl}?auth_success=true`);
+    const tokens = await getAccessToken(code)
 
-  res.status(200)
+    const redirectUrl = decodeURIComponent(state || "/email-account");
+    res.redirect(`${redirectUrl}?auth_success=true`);
+
+    res.status(200)
 
     // Return response
   } catch (error) {
