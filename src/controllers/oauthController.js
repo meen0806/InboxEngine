@@ -1,4 +1,7 @@
 const { generateAuthUrl, getTokens } = require('../services/oauthService');
+const Account =require("../models/account");
+const { sendEmailFromGoogle } = require('../util/sendEmail');
+const { default: axios } = require('axios');
 
 /**
  * Get Google OAuth2 Authentication URL
@@ -6,9 +9,9 @@ const { generateAuthUrl, getTokens } = require('../services/oauthService');
 exports.getAuthUrl = (req, res) => {
   try {
     const authUrl = generateAuthUrl();
-    res.status(200).json({ url: authUrl });
+    res.status(200).json({ success: true,url: authUrl });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to generate authentication URL', details: error.message });
+    res.status(500).json({success: false, error: 'Failed to generate authentication URL', details: error.message });
   }
 };
 
@@ -24,12 +27,11 @@ exports.handleCallback = async (req, res) => {
 
   try {
     const tokens = await getTokens(code);
-
-    // Send tokens to the user or save them in the database
     res.status(200).json({
       message: 'Authorization successful',
       tokens,
     });
+ 
   } catch (error) {
     res.status(500).json({ error: 'Failed to process callback', details: error.message });
   }
