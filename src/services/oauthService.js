@@ -12,7 +12,7 @@ const oauth2Client = new google.auth.OAuth2(
 /**
  * Generate Google OAuth2 Authentication URL
  */
-const generateAuthUrl = () => {
+const generateAuthUrl = (origin=null) => {
   const scopes = [
     "openid",
     "https://www.googleapis.com/auth/gmail.send",
@@ -31,6 +31,7 @@ const generateAuthUrl = () => {
       scope: scopes.join(" "),
       access_type: "offline",
       prompt: "consent",
+      state: origin,
     })
   );
 };
