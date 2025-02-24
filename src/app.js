@@ -7,6 +7,7 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerDocument = require('../swagger.json'); // Import Swagger config
 const oauthRoutes = require('./routes/oauthRoutes'); // Import OAuth routes
 const mailboxRoutes = require('./routes/mailboxRoutes'); // Import OAuth routes
+const outlookRoutes=require("./routes/outlookRoutes")
 
 const app = express();
 
@@ -19,5 +20,6 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 app.use('/api/accounts', accountRoutes);
 app.use('/api/accounts', mailboxRoutes);
 app.use('/api/oauth', oauthRoutes); // Add OAuth routes
+app.use("/",outlookRoutes)
 
 module.exports = app;
