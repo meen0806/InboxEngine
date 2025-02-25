@@ -8,7 +8,7 @@ const { getAuthUrl, getAccessToken, getUserDetails } = require("../services/outl
 
 const getMicrosoftAuthUrl = (req, res) => {
   try {
-   
+
     const {origin}=req.query
     const authUrl = getAuthUrl(origin);
     res.status(200).json({ success: true,url: authUrl });
@@ -33,10 +33,6 @@ const handleMicrosoftCallback = async (req, res) => {
 
     const redirectUrl = decodeURIComponent(state || "/email-account");
     res.redirect(`${redirectUrl}?auth_success=true`);
-
-    res.status(200)
-
-    // Return response
   } catch (error) {
     console.error('Error during authentication:', error.response?.data || error.message);
     res.status(500).json({ success: false, error: "Authentication failed" });
