@@ -14,12 +14,13 @@ const app = express();
 // Middleware
 app.use(express.json());
 app.use(morgan('dev'));
+
 app.use(cors())
 // Routes
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 app.use('/api/accounts', accountRoutes);
 app.use('/api/accounts', mailboxRoutes);
-app.use('/api/oauth', oauthRoutes); // Add OAuth routes
+app.use('/api/oauth', oauthRoutes);
 app.use("/api/outlook",outlookRoutes)
 
 module.exports = app;

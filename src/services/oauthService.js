@@ -32,7 +32,7 @@ const generateAuthUrl = (origin=null) => {
       scope: scopes.join(" "),
       access_type: "offline",
       prompt: "consent",
-      state:origin,
+      state: origin,
     })
   );
 };
