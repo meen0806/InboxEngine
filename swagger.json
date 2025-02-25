@@ -18,7 +18,7 @@
             "description": "List of accounts",
             "schema": {
               "type": "array",
-              "items": { "$ref": "#/definitions/Account" }
+              "items": {"$ref": "#/definitions/Account"}
             }
           }
         }
@@ -31,7 +31,7 @@
             "in": "body",
             "name": "body",
             "required": true,
-            "schema": { "$ref": "#/definitions/Account" }
+            "schema": {"$ref": "#/definitions/Account"}
           }
         ],
         "responses": {
@@ -56,7 +56,7 @@
         "responses": {
           "200": {
             "description": "Account details",
-            "schema": { "$ref": "#/definitions/Account" }
+            "schema": {"$ref": "#/definitions/Account"}
           }
         }
       },
@@ -74,7 +74,7 @@
             "in": "body",
             "name": "body",
             "required": true,
-            "schema": { "$ref": "#/definitions/Account" }
+            "schema": {"$ref": "#/definitions/Account"}
           }
         ],
         "responses": {
@@ -101,9 +101,10 @@
         }
       }
     },
+
     "/accounts/verify": {
       "post": {
-        "summary": "Verify Accounts for smtp",
+        "summary": "Verify accounts",
         "tags": ["Accounts"],
         "parameters": [
           {
@@ -150,13 +151,11 @@
         ],
         "responses": {
           "200": {
-            "description": "List of mailboxes"
+            "description": "Account Verified"
           }
         }
       }
-    }
-  },
-    
+    },
     "/accounts/{account}/mailboxes": {
       "get": {
         "summary": "Get mailboxes for account",
@@ -481,7 +480,8 @@
       }
     }
   
-  ,
+  },
+  
   "definitions": {
     "Account": {
       "type": "object",
