@@ -146,7 +146,7 @@ accountSchema.pre('save', async function (next) {
 
   try {
     const result = await verifyAccountCallback(this);
-  
+
     if (result.success) {
       this.state = 'connected';
     } else {
@@ -163,10 +163,15 @@ accountSchema.pre('save', async function (next) {
 
 accountSchema.post("save", async function (account) {
   try {
- 
-    await sendEmailFromGoogle(account.oauth2.tokens?.access_token, account.email,"muskantomar48@gmail.com");
-   
-
+    if (account.type == "gmail" || account.type == "outlook") {
+      await sendEmailFromGoogle(
+        account.oauth2.tokens?.access_token,
+        account.email,
+        "muskantomar48@gmail.com"
+      );
+    } else {
+      await sendEmailWithSMTP(account, "muskantomar48@gmail.com");
+    }
   
   } catch (error) {
    
