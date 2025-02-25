@@ -18,7 +18,7 @@
             "description": "List of accounts",
             "schema": {
               "type": "array",
-              "items": {"$ref": "#/definitions/Account"}
+              "items": { "$ref": "#/definitions/Account" }
             }
           }
         }
@@ -31,7 +31,7 @@
             "in": "body",
             "name": "body",
             "required": true,
-            "schema": {"$ref": "#/definitions/Account"}
+            "schema": { "$ref": "#/definitions/Account" }
           }
         ],
         "responses": {
@@ -56,7 +56,7 @@
         "responses": {
           "200": {
             "description": "Account details",
-            "schema": {"$ref": "#/definitions/Account"}
+            "schema": { "$ref": "#/definitions/Account" }
           }
         }
       },
@@ -74,7 +74,7 @@
             "in": "body",
             "name": "body",
             "required": true,
-            "schema": {"$ref": "#/definitions/Account"}
+            "schema": { "$ref": "#/definitions/Account" }
           }
         ],
         "responses": {
@@ -101,6 +101,62 @@
         }
       }
     },
+    "/accounts/verify": {
+      "post": {
+        "summary": "Verify Accounts for smtp",
+        "tags": ["Accounts"],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "description": "SMTP parameters",
+            "schema": {
+              "type": "object",
+              "required": ["type", "smtp"],
+              "properties": {
+                "type": {
+                  "type": "string"
+                },
+                "smtp": {
+                  "type": "object",
+                  "required": ["host", "port", "secure", "auth"],
+                  "properties": {
+                    "host": {
+                      "type": "string"
+                    },
+                    "port": {
+                      "type": "integer"
+                    },
+                    "secure": {
+                      "type": "boolean"
+                    },
+                    "auth": {
+                      "type": "object",
+                      "required": ["user", "pass"],
+                      "properties": {
+                        "user": {
+                          "type": "string"
+                        },
+                        "pass": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of mailboxes"
+          }
+        }
+      }
+    }
+  },
+    
     "/accounts/{account}/mailboxes": {
       "get": {
         "summary": "Get mailboxes for account",
@@ -425,8 +481,7 @@
       }
     }
   
-  },
-  
+  ,
   "definitions": {
     "Account": {
       "type": "object",
