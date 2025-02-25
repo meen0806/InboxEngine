@@ -17,7 +17,8 @@ const getAuthUrl = (origin) => {
     redirect_uri: REDIRECT_URI,
     response_mode: "query",
     scope: "openid profile email User.Read offline_access",
-    state: origin
+    state: origin,
+    prompt:"select_account"
   });
 
   return `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params}`;
