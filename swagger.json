@@ -368,6 +368,14 @@
       "get": {
         "summary": "Get OAuth2 authentication URL",
         "tags": ["OAuth"],
+        "parameters": [
+          {
+            "name": "origin",
+            "in": "query",
+            "required": true,
+            "type": "string"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Authentication URL"
@@ -385,8 +393,40 @@
           }
         }
       }
+    },
+    "/outlook/auth-url": {
+      "get": {
+        "summary": "Get Outlook authentication URL",
+        "tags": ["Outlook"],
+        "parameters": [
+          {
+            "name": "origin",
+            "in": "query",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authentication URL"
+          }
+        }
+      }
+    },
+    "/outlook/callback": {
+      "get": {
+        "summary": "Handle Outlook callback",
+        "tags": ["Outlook"],
+        "responses": {
+          "200": {
+            "description": "OAuth2 callback handled successfully"
+          }
+        }
+      }
     }
+  
   },
+  
   "definitions": {
     "Account": {
       "type": "object",
