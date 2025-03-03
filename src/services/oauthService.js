@@ -59,6 +59,7 @@ const getTokens = async (code) => {
         name: userInfo.name,
         account: userInfo.email, 
         type: "gmail",
+        // state: "connected",
         oauth2: {
           authorize: true,
           clientId: process.env.GOOGLE_CLIENT_ID, 
