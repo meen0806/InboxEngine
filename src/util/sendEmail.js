@@ -1,5 +1,5 @@
 const { default: axios } = require("axios");
-
+const nodemailer =require("nodemailer")
 const sendEmailFromGoogle = async (accessToken, fromEmail, toEmail) => {
   if (!toEmail) {
     throw new Error(" Recipient email address is missing!");
@@ -37,7 +37,7 @@ This is a test email sent from the logged-in Google account using OAuth authenti
 };
 
 const sendEmailWithSMTP = async (account, toEmail) => {
- 
+
   if (!toEmail) {
     throw new Error("Recipient email address is missing!");
   }
@@ -67,4 +67,55 @@ const sendEmailWithSMTP = async (account, toEmail) => {
   }
 };
 
-module.exports = { sendEmailFromGoogle,sendEmailWithSMTP };
+const sendEmailFromMicrosoft = async (accessToken, fromEmail, toEmail) => {
+  if (!accessToken) {
+    throw new Error("Access token is required!");
+  }
+  if (!toEmail) {
+    throw new Error("Recipient email is required!");
+  }
+
+  const emailData = {
+    message: {
+      subject: "Test Email from Microsoft OAuth2",
+      body: {
+        contentType: "Text",
+        content:
+          "This is a test email sent via Microsoft Graph API using OAuth2.",
+      },
+      toRecipients: [
+        {
+          emailAddress: { address: toEmail },
+        },
+      ],
+      from: {
+        emailAddress: { address: fromEmail },
+      },
+    },
+    saveToSentItems: "true",
+  };
+
+  try {
+    const response = await axios.post(
+      "https://graph.microsoft.com/v1.0/me/sendMail",
+      emailData,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    console.log("Email sent successfully:", response.status);
+    return response.data;
+  } catch (error) {
+    console.error(
+      "Error sending email:",
+      error.response?.data || error.message
+    );
+    throw new Error("Failed to send test email");
+  }
+};
+
+module.exports = { sendEmailFromGoogle,sendEmailWithSMTP,sendEmailFromMicrosoft };

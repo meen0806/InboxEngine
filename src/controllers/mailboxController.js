@@ -8,6 +8,7 @@ const nodemailer = require('nodemailer');
 const ImapFlow = require('imapflow');
 const { fetchAndSaveMessages } = require('../services/mailboxService');
 const { fetchAndSaveMailboxes } = require('../services/mailboxService');
+const { sendEmailFromMicrosoft, sendEmailWithSMTP } = require('../util/sendEmail');
 // Get mailboxes
 exports.getMailboxes = async (req, res) => {
   try {
@@ -128,7 +129,7 @@ exports.loadMailbox =  async (req, res) => {
     if (!accountDetails) {
       return res.status(404).json({ error: 'Account not found' });
     }
-    
+
     await accountData.save();
     const mailboxes = await fetchAndSaveMailboxes(accountDetails);
     res.status(201).json({ success: true, mailboxes });
@@ -137,4 +138,40 @@ exports.loadMailbox =  async (req, res) => {
   }
 };
 
+
+exports.sendTestEmail = async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ message: "Email is required" });
+  }
+
+  const account = await Account.findOne({ email });
+
+  const accessToken = account?.oauth2?.tokens?.access_token;
+
+  if (account.type == "imap") {
+    const smtpemailTest = await sendEmailWithSMTP(
+      account,
+      "muskantomar48@gmail.com"
+    );
+  }
+  if (account.type == "gmail") {
+    const sendTestEmail = await sendEmailFromGoogle(
+      accessToken,
+      account.email,
+      "muskantomar48@gmail.com"
+    );
+  }
+
+  if (account.type == "outlook") {
+    const sendoutlookEmail = await sendEmailFromMicrosoft(
+      accessToken,
+      account.email,
+      "muskantomar48@gmail.com"
+    );
+  }
+
+  res.status(200).json("Email sent").json({ account });
+};
 
