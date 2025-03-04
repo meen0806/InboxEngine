@@ -18,7 +18,7 @@
             "description": "List of accounts",
             "schema": {
               "type": "array",
-              "items": {"$ref": "#/definitions/Account"}
+              "items": { "$ref": "#/definitions/Account" }
             }
           }
         }
@@ -152,6 +152,39 @@
         "responses": {
           "200": {
             "description": "Account Verified"
+          }
+        }
+      }
+    },
+    "/accounts/search": {
+      "get": {
+        "summary": "Search Accounts",
+        "tags": ["Accounts"],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "email",
+            "description": "Email of the account to search",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+            
+          },
+          {
+            "in": "query",
+            "name": "name",
+            "description": "Name of the account to search",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+           
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account searched succesfuly"
           }
         }
       }
@@ -419,6 +452,31 @@
         }
       }
     },
+
+    "/accounts/send-test-email": {
+      "post": {
+        "summary": "Send Test Email",
+        "tags": ["Mailboxes"],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "email",
+            "description": "Email of the account to search",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+            
+          }
+      
+        ],
+        "responses": {
+          "200": {
+            "description": "Email sent successfuly"
+          }
+        }
+      }
+    },
     "/oauth/auth-url": {
       "get": {
         "summary": "Get OAuth2 authentication URL",
@@ -479,7 +537,6 @@
         }
       }
     }
-  
   },
   
   "definitions": {
