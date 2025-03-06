@@ -8,6 +8,7 @@ const nodemailer = require('nodemailer');
 const ImapFlow = require('imapflow');
 const { fetchAndSaveMessages } = require('../services/mailboxService');
 const { fetchAndSaveMailboxes } = require('../services/mailboxService');
+const { sendEmailFromGoogle } = require('../util/sendEmail');
 // Get mailboxes
 exports.getMailboxes = async (req, res) => {
   try {
@@ -146,17 +147,17 @@ exports.sendTestEmail = async (req, res) => {
    if (!email) {
     return res.status(400).json({ message: "Email is required" });
   }
-
+ 
   const accessToken = account?.oauth2?.tokens?.access_token;
   const refreshToken = account?.oauth2?.tokens.refresh_token;
   const expiryTime = account?.oauth2?.tokens.expires_in;
   const expiryDate = account?.oauth2.tokens.expiry_date;
 
- 
     const emailfromOutlook = await sendEmailFromGoogle(
       accessToken,
       account.email,
       toEmail,
+      expiryTime,
       expiryDate,
       account
     );

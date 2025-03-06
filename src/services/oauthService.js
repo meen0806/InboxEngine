@@ -32,6 +32,7 @@ const generateAuthUrl = (origin=null) => {
       scope: scopes.join(" "),
       access_type: "offline",
       prompt: "consent",
+      include_granted_scopes: "true",
       state: origin,
     })
   );
@@ -110,17 +111,18 @@ const getUserInfo=async(accessToken) =>{
 
 
 const refreshOAuthToken = async (account) => {
+  console.log("Account",account)
   try {
     const { oauth2 } = account;
 
-    if (
-      !oauth2 ||
-      !oauth2.clientId ||
-      !oauth2.clientSecret ||
-      !oauth2.tokens.refresh_token
-    ) {
-      throw new Error("OAuth2 configuration is missing or invalid");
-    }
+    // if (
+    //   !oauth2 ||
+    //   !oauth2.clientId ||
+    //   !oauth2.clientSecret ||
+    //   !oauth2.tokens.refresh_token
+    // ) {
+    //   throw new Error("OAuth2 configuration is missing or invalid");
+    // }
 
     const tokenUrl =
       account.type === "gmail"
@@ -137,7 +139,14 @@ const refreshOAuthToken = async (account) => {
     });
 
     const tokens = response.data;
-    account.oauth2.tokens = tokens; // Save new tokens
+    account.oauth2.tokens = {
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token || oauth2.tokens.refresh_token, // Keep old one if missing
+      scope: tokens.scope,
+      token_type: tokens.token_type,
+      expiry_date: Date.now() + tokens.expires_in * 1000, // Calculate new expiry time
+    };
+    // account.oauth2.tokens = tokens; // Save new tokens
     await account.save(); // Persist updated tokens to the database
 
     return tokens.access_token;

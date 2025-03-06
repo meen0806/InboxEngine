@@ -3,28 +3,29 @@ const nodemailer =require("nodemailer");
 const { refreshOAuthToken } = require("../services/oauthService");
 
 
-const sendEmailFromGoogle = async (accessToken, fromEmail, toEmail,expiryDate,refreshToken,account) => {
+const sendEmailFromGoogle = async (
+  accessToken,
+  fromEmail,
+  toEmail,
+  expiryTime,
+  expiryDate,
+  account
+) => {
   if (!toEmail) {
     throw new Error(" Recipient email address is missing!");
     return;
   }
- 
 
   const isTokenExpired = (tokenExpiryTime) => {
     const currentTime = Date.now();
 
-    if (tokenExpiryTime < 9999999999) {
-      tokenExpiryTime *= 1000;
-    }
-
     return currentTime >= tokenExpiryTime;
   };
 
-  if (isTokenExpired(expiryDate)) {
+  if (isTokenExpired(expiryTime)) {
     accessToken = await refreshOAuthToken(account);
   }
 
-  
   const emailContent = `From: ${fromEmail}
 To: ${toEmail}
 Subject: Google OAuth Email Test
