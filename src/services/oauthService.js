@@ -117,7 +117,7 @@ const refreshOAuthToken = async (account) => {
       !oauth2 ||
       !oauth2.clientId ||
       !oauth2.clientSecret ||
-      !oauth2.refreshToken
+      !oauth2.tokens.refresh_token
     ) {
       throw new Error("OAuth2 configuration is missing or invalid");
     }
@@ -131,7 +131,7 @@ const refreshOAuthToken = async (account) => {
       params: {
         client_id: oauth2.clientId,
         client_secret: oauth2.clientSecret,
-        refresh_token: oauth2.refreshToken,
+        refresh_token: oauth2.tokens.refresh_token,
         grant_type: "refresh_token",
       },
     });

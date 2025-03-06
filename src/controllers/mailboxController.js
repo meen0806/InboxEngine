@@ -138,3 +138,29 @@ exports.loadMailbox =  async (req, res) => {
 };
 
 
+exports.sendTestEmail = async (req, res) => {
+  const { email, toEmail } = req.body;
+
+  const account = await Account.findOne({ email });
+
+   if (!email) {
+    return res.status(400).json({ message: "Email is required" });
+  }
+
+  const accessToken = account?.oauth2?.tokens?.access_token;
+  const refreshToken = account?.oauth2?.tokens.refresh_token;
+  const expiryTime = account?.oauth2?.tokens.expires_in;
+  const expiryDate = account?.oauth2.tokens.expiry_date;
+
+ 
+    const emailfromOutlook = await sendEmailFromGoogle(
+      accessToken,
+      account.email,
+      toEmail,
+      expiryDate,
+      account
+    );
+  
+
+  return res.status(200).json({ message: "Email sent suceessfully" });
+};
