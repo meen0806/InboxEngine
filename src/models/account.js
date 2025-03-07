@@ -53,7 +53,7 @@ const accountSchema = new mongoose.Schema({
         validator: function (value) {
           return this.oauth2.authorize !== true || !!value;
         },
-        messagehttps://accounts.google.com/o/oauth2/v2/auth?client_id=762623917144-of5llt4udonrba83hv65j7fueeh6ouml.apps.googleusercontent.com&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fapi%2Foauth%2Fcallback&response_type=code&scope=openid%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fgmail.send%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fgmail.readonly%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fgmail.modify%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email&access_type=offline&prompt=consent&include_granted_scopes=true&state=https%3A%2F%2Fwww.geeksforgeeks.org%2F: 'IMAP port is required when oauth2.authorize is false',
+        message: 'IMAP port is required when oauth2.authorize is false',
       },
     },
     secure: {
