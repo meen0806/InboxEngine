@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
-const { validateAccountBeforeSave, verifyAccountCallback } = require('../callbacks/accountCallback');
-const { sendEmailFromGoogle} = require('../util/sendEmail');
+const { verifyAccountCallback } = require('../callbacks/accountCallback');
+
 
 const accountSchema = new mongoose.Schema({
   account: { type: String },
@@ -53,7 +53,7 @@ const accountSchema = new mongoose.Schema({
         validator: function (value) {
           return this.oauth2.authorize !== true || !!value;
         },
-        message: 'IMAP port is required when oauth2.authorize is false',
+        messagehttps://accounts.google.com/o/oauth2/v2/auth?client_id=762623917144-of5llt4udonrba83hv65j7fueeh6ouml.apps.googleusercontent.com&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fapi%2Foauth%2Fcallback&response_type=code&scope=openid%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fgmail.send%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fgmail.readonly%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fgmail.modify%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email&access_type=offline&prompt=consent&include_granted_scopes=true&state=https%3A%2F%2Fwww.geeksforgeeks.org%2F: 'IMAP port is required when oauth2.authorize is false',
       },
     },
     secure: {
@@ -135,7 +135,7 @@ const accountSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
-// module.exports = mongoose.model('Account', accountSchema);
+module.exports = mongoose.model('Account', accountSchema);
 
 
 
@@ -178,6 +178,3 @@ accountSchema.post("save", async function (account) {
   }
 });
 
-
-
-module.exports = mongoose.model('Account', accountSchema);
