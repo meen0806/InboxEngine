@@ -1,6 +1,7 @@
 const { default: axios } = require("axios");
 const nodemailer =require("nodemailer");
 const { refreshOAuthToken } = require("../services/oauthService");
+const { refreshMicrosoftOAuthToken } = require("../services/outlookService");
 
 
 const sendEmailFromGoogle = async (
@@ -22,10 +23,20 @@ const sendEmailFromGoogle = async (
     return currentTime >= tokenExpiryTime;
   };
 
-  if (isTokenExpired(expiryTime)) {
+  if (isTokenExpired( expiryTime)) {
     accessToken = await refreshOAuthToken(account);
   }
 
+  if (isTokenExpired(expiryTime)) {
+    // Check if refresh token exists before refreshing
+    if (!account.oauth2.tokens.refresh_token) {
+      throw new Error(
+        "Missing refresh token. Please log in again to generate a new one."
+      );
+    }
+
+    accessToken = await refreshOAuthToken(account);
+  }
   const emailContent = `From: ${fromEmail}
 To: ${toEmail}
 Subject: Google OAuth Email Test
@@ -87,12 +98,32 @@ const sendEmailWithSMTP = async (account, toEmail) => {
   }
 };
 
-const sendEmailFromMicrosoft = async (accessToken,refreshToken, fromEmail, toEmail,expiryTime) => {
+const sendEmailFromMicrosoft = async (accessToken, fromEmail, toEmail,expiryTime) => {
   if (!accessToken) {
     throw new Error("Access token is required!");
   }
   if (!toEmail) {
     throw new Error("Recipient email is required!");
+  }
+  const isTokenExpired = (tokenExpiryTime) => {
+    const currentTime = Date.now();
+
+    return currentTime >= tokenExpiryTime;
+  };
+
+  if (isTokenExpired( expiryTime)) {
+    accessToken = await refreshOAuthToken(account);
+  }
+
+  if (isTokenExpired(expiryTime)) {
+    // Check if refresh token exists before refreshing
+    if (!account.oauth2.tokens.refresh_token) {
+      throw new Error(
+        "Missing refresh token. Please log in again to generate a new one."
+      );
+    }
+
+    accessToken = await refreshMicrosoftOAuthToken(account);
   }
 
   const emailData = {
