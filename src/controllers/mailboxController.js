@@ -8,7 +8,7 @@ const nodemailer = require('nodemailer');
 const ImapFlow = require('imapflow');
 const { fetchAndSaveMessages } = require('../services/mailboxService');
 const { fetchAndSaveMailboxes } = require('../services/mailboxService');
-const { sendEmailFromGoogle, sendEmailFromMicrosoft } = require('../util/sendEmail');
+const { sendEmailFromGoogle, sendEmailFromMicrosoft, sendEmailWithSMTP } = require('../util/sendEmail');
 // Get mailboxes
 exports.getMailboxes = async (req, res) => {
   try {
@@ -164,7 +164,7 @@ exports.sendTestEmail = async (req, res) => {
     );
   } else if (account.type === "outlook") {
     await sendEmailFromMicrosoft(accessToken, account.email, toEmail);
-  } else if (account.type === "smtp") {
+  } else if (account.type === "imap") {
     await sendEmailWithSMTP(account, toEmail);
   } else {
     return res.status(400).json({ message: "Unsupported email provider" });
