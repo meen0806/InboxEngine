@@ -110,19 +110,19 @@ const getUserInfo=async(accessToken) =>{
 }
 
 
-const refreshOAuthToken = async (account) => {
-  console.log("Account",account)
+const refreshOAuthToken =  async (account) => {
+
   try {
     const { oauth2 } = account;
 
-    // if (
-    //   !oauth2 ||
-    //   !oauth2.clientId ||
-    //   !oauth2.clientSecret ||
-    //   !oauth2.tokens.refresh_token
-    // ) {
-    //   throw new Error("OAuth2 configuration is missing or invalid");
-    // }
+    if (
+      !oauth2 ||
+      !oauth2.clientId ||
+      !oauth2.clientSecret ||
+      !oauth2.tokens.refresh_token
+    ) {
+      throw new Error("OAuth2 configuration is missing or invalid");
+    }
 
     const tokenUrl =
       account.type === "gmail"
@@ -139,15 +139,33 @@ const refreshOAuthToken = async (account) => {
     });
 
     const tokens = response.data;
+ 
+    if (!oauth2.tokens.refresh_token) {
+    
+      const newRefreshTokenResponse = await axios.post(
+        "https://oauth2.googleapis.com/token",
+        null,
+        {
+          params: {
+            client_id: oauth2.clientId,
+            client_secret: oauth2.clientSecret,
+            grant_type: "client_credentials",
+          },
+        }
+      );
+
+      const newRefreshTokenData = newRefreshTokenResponse.data;
+      tokens.refresh_token = newRefreshTokenData.refresh_token;
+    }
     account.oauth2.tokens = {
       access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token || oauth2.tokens.refresh_token, // Keep old one if missing
+      refresh_token: tokens.refresh_token || oauth2.tokens.refresh_token, 
       scope: tokens.scope,
       token_type: tokens.token_type,
-      expiry_date: Date.now() + tokens.expires_in * 1000, // Calculate new expiry time
+      expiry_date: Date.now() + tokens.expires_in * 1000, 
     };
-    // account.oauth2.tokens = tokens; // Save new tokens
-    await account.save(); // Persist updated tokens to the database
+ 
+    await account.save(); 
 
     return tokens.access_token;
   } catch (err) {

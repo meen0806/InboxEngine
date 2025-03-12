@@ -8,7 +8,7 @@ const nodemailer = require('nodemailer');
 const ImapFlow = require('imapflow');
 const { fetchAndSaveMessages } = require('../services/mailboxService');
 const { fetchAndSaveMailboxes } = require('../services/mailboxService');
-const { sendEmailFromGoogle } = require('../util/sendEmail');
+const { sendEmailFromGoogle, sendEmailFromMicrosoft } = require('../util/sendEmail');
 // Get mailboxes
 exports.getMailboxes = async (req, res) => {
   try {
@@ -144,24 +144,31 @@ exports.sendTestEmail = async (req, res) => {
 
   const account = await Account.findOne({ email });
 
-   if (!email) {
+  if (!email) {
     return res.status(400).json({ message: "Email is required" });
   }
- 
-  const accessToken = account?.oauth2?.tokens?.access_token;
-  const refreshToken = account?.oauth2?.tokens.refresh_token;
-  const expiryTime = account?.oauth2?.tokens.expires_in;
-  const expiryDate = account?.oauth2.tokens.expiry_date;
+  let accessToken, expiryTime;
 
-    const emailfromOutlook = await sendEmailFromGoogle(
+  if (["gmail", "outlook"].includes(account.type)) {
+    accessToken = account?.oauth2?.tokens?.access_token;
+    expiryTime = account?.oauth2?.tokens?.expires_in;
+  }
+
+  if (account.type === "gmail") {
+    await sendEmailFromGoogle(
       accessToken,
       account.email,
       toEmail,
       expiryTime,
-      expiryDate,
       account
     );
-  
+  } else if (account.type === "outlook") {
+    await sendEmailFromMicrosoft(accessToken, account.email, toEmail);
+  } else if (account.type === "smtp") {
+    await sendEmailWithSMTP(account, toEmail);
+  } else {
+    return res.status(400).json({ message: "Unsupported email provider" });
+  }
 
   return res.status(200).json({ message: "Email sent suceessfully" });
 };

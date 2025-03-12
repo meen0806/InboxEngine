@@ -106,8 +106,48 @@ const getUserDetails = async (accessToken) => {
   }
 };
 
+const refreshMicrosoftOAuthToken = async (account) => {
+  try {
+    if (!account?.oauth2?.tokens?.refresh_token) {
+      throw new Error("Missing refresh token. Please log in again.");
+    }
+
+    const tokenResponse = await axios.post(
+      "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+      querystring.stringify({
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+        refresh_token: account.oauth2.tokens.refresh_token,
+        grant_type: "refresh_token",
+      }),
+      { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+    );
+
+    const { access_token, refresh_token, expires_in, token_type, scope } =
+      tokenResponse.data;
+
+   
+    account.oauth2.tokens = {
+      access_token,
+      refresh_token, 
+      expires_in,
+      token_type,
+      scope,
+    };
+
+    await account.save();
+
+    return { access_token, refresh_token, expires_in, token_type, scope };
+  } catch (error) {
+    console.error("Error refreshing access token:", error.response?.data || error.message);
+    throw new Error("Failed to refresh access token");
+  }
+};
+
+
 module.exports = {
   getAuthUrl,
   getAccessToken,
   getUserDetails,
+  refreshMicrosoftOAuthToken
 };
