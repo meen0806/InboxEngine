@@ -36,12 +36,6 @@ exports.getMessages = async (req, res) => {
       });
     }
 
-    if (limit < 1 || isNaN(limit) || limit > 50) {
-      return res.status(400).json({
-        status: "fail",
-        message: "Invalid limit. Limit must be a positive integer (max: 50).",
-      });
-    }
     const messages = await Message.find({
       account_id: account,
       mailbox_id: mailbox,
