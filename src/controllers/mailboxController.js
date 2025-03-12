@@ -26,8 +26,54 @@ exports.getMessages = async (req, res) => {
   try {
     const { account } = req.params;
     const { mailbox } = req.params;
-    const messages = await Message.find({ "account_id": account, "mailbox_id":mailbox });
-    res.status(200).json(messages);
+    const { page , limit  } = req.query;
+   
+
+    if (page < 1 || isNaN(page)) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Invalid page number. Page must be a positive integer.",
+      });
+    }
+
+    if (limit < 1 || isNaN(limit) || limit > 50) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Invalid limit. Limit must be a positive integer (max: 50).",
+      });
+    }
+    const messages = await Message.find({
+      account_id: account,
+      mailbox_id: mailbox,
+    })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    const totalMessages = await Message.countDocuments({
+      account_id: account,
+      mailbox_id: mailbox,
+    });
+    const totalPages = Math.ceil(totalMessages / limit);
+    if (!messages.length) {
+      return res.status(404).json({
+        status: "fail",
+        message: "No messages found for the given account and mailbox.",
+        totalMessages,
+        totalPages,
+        currentPage: page,
+      });
+    }
+
+    res.status(200).json({
+      status: "success",
+      message: "Messages retrieved successfully.",
+      data: {
+        messages,
+        totalMessages,
+        totalPages,
+        currentPage: page,
+      },
+    });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch messages', details: err.message });
   }
