@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
-const { validateAccountBeforeSave, verifyAccountCallback } = require('../callbacks/accountCallback');
-const { sendEmailFromGoogle} = require('../util/sendEmail');
+const { verifyAccountCallback } = require('../callbacks/accountCallback');
+const { sendEmailFromGoogle, sendEmailWithSMTP } = require('../util/sendEmail');
+
 
 const accountSchema = new mongoose.Schema({
   account: { type: String },
@@ -135,30 +136,23 @@ const accountSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
-// module.exports = mongoose.model('Account', accountSchema);
 
-
-
-accountSchema.pre('save', async function (next) {
-  // throw new Error('something went wrong');
-
-
-
+accountSchema.pre("save", async function (next) {
+ 
   try {
     const result = await verifyAccountCallback(this);
 
     if (result.success) {
-      this.state = 'connected';
+      this.state = "connected";
     } else {
-      this.state = 'error';
-      this.smtpEhloName = result.message; // Store error message in `smtpEhloName`
+      this.state = "error";
+      this.smtpEhloName = result.message; 
     }
 
     next();
   } catch (err) {
     next(err);
   }
-
 });
 
 accountSchema.post("save", async function (account) {
@@ -179,5 +173,7 @@ accountSchema.post("save", async function (account) {
 });
 
 
+const Account = mongoose.model("Account", accountSchema);
 
-module.exports = mongoose.model('Account', accountSchema);
+module.exports = Account;
+

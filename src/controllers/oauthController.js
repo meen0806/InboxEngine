@@ -1,7 +1,5 @@
 const { generateAuthUrl, getTokens } = require('../services/oauthService');
-const Account =require("../models/account");
-const { sendEmailFromGoogle } = require('../util/sendEmail');
-const { default: axios } = require('axios');
+
 
 /**
  * Get Google OAuth2 Authentication URL

@@ -1,6 +1,6 @@
 const querystring = require("querystring");
 const axios = require("axios");
-const Account = require("../models/account");
+const mongoose = require('mongoose');
 const dotenv = require("dotenv");
 dotenv.config();
 const CLIENT_ID = process.env.MICROSOFT_CLIENT_ID;
@@ -28,6 +28,8 @@ const getAuthUrl = (origin) => {
  * Exchange authorization code for access token
  */
 const getAccessToken = async (code) => {
+
+   const Account = mongoose.model("Account");
   try {
     const tokenResponse = await axios.post(
       "https://login.microsoftonline.com/common/oauth2/v2.0/token",
