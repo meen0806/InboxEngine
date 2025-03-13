@@ -1,8 +1,7 @@
 const { google } = require("googleapis");
 const axios = require("axios");
 const querystring = require("querystring");
-const Account = require("../models/account");
-
+const mongoose = require('mongoose');
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
@@ -43,45 +42,47 @@ const generateAuthUrl = (origin=null) => {
  * @param {string} code - Authorization code from Google
  */
 const getTokens = async (code) => {
+  const Account = mongoose.model("Account");
+
   try {
     const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
-    const { access_token, refresh_token ,scope,token_type,expiry_date} = tokens;
-    const userInfo=await getUserInfo(access_token)
+    const { access_token, refresh_token, scope, token_type, expiry_date } =
+      tokens;
+    const userInfo = await getUserInfo(access_token);
 
-   
     let account = await Account.findOne({ email: userInfo.email });
 
-   
     if (!account) {
-     
       account = new Account({
         email: userInfo.email,
         name: userInfo.name,
-        account: userInfo.email, 
+        account: userInfo.email,
         type: "gmail",
         // state: "connected",
         oauth2: {
           authorize: true,
-          clientId: process.env.GOOGLE_CLIENT_ID, 
+          clientId: process.env.GOOGLE_CLIENT_ID,
           clientSecret: process.env.GOOGLE_CLIENT_SECRET,
           redirectUri: process.env.GOOGLE_REDIRECT_URI,
-         tokens: { access_token, refresh_token, scope,token_type ,expiry_date},
+          tokens: {
+            access_token,
+            refresh_token,
+            scope,
+            token_type,
+            expiry_date,
+          },
         },
         createdAt: new Date(),
       });
-
-    
     } else {
-  
       account.oauth2 = {
         authorize: true,
         clientId: process.env.GOOGLE_CLIENT_ID,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
         redirectUri: process.env.GOOGLE_REDIRECT_URI,
-        tokens: { access_token, refresh_token, scope,token_type ,expiry_date},
+        tokens: { access_token, refresh_token, scope, token_type, expiry_date },
       };
-     
     }
 
     await account.save();
