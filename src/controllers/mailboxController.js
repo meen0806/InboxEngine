@@ -26,41 +26,41 @@ exports.getMessages = async (req, res) => {
   try {
     const { account } = req.params;
     const { mailbox } = req.params;
-    const { page , limit  } = req.query;
+    // const { page , limit  } = req.query;
    
 
-    if (page < 1 || isNaN(page)) {
-      return res.status(400).json({
-        status: "fail",
-        message: "Invalid page number. Page must be a positive integer.",
-      });
-    }
+    // if (page < 1 || isNaN(page)) {
+    //   return res.status(400).json({
+    //     status: "fail",
+    //     message: "Invalid page number. Page must be a positive integer.",
+    //   });
+    // }
 
-    if (limit < 1 || isNaN(limit) || limit > 50) {
-      return res.status(400).json({
-        status: "fail",
-        message: "Invalid limit. Limit must be a positive integer (max: 50).",
-      });
-    }
+    // if (limit < 1 || isNaN(limit) || limit > 50) {
+    //   return res.status(400).json({
+    //     status: "fail",
+    //     message: "Invalid limit. Limit must be a positive integer (max: 50).",
+    //   });
+    // }
     const messages = await Message.find({
       account_id: account,
       mailbox_id: mailbox,
     })
-      .skip((page - 1) * limit)
-      .limit(parseInt(limit));
+      // .skip((page - 1) * limit)
+      // .limit(parseInt(limit));
 
     const totalMessages = await Message.countDocuments({
       account_id: account,
       mailbox_id: mailbox,
     });
-    const totalPages = Math.ceil(totalMessages / limit);
+    // const totalPages = Math.ceil(totalMessages / limit);
     if (!messages.length) {
       return res.status(404).json({
         status: "fail",
         message: "No messages found for the given account and mailbox.",
         totalMessages,
-        totalPages,
-        currentPage: page,
+        // totalPages,
+        // currentPage: page,
       });
     }
 
@@ -70,8 +70,8 @@ exports.getMessages = async (req, res) => {
       data: {
         messages,
         totalMessages,
-        totalPages,
-        currentPage: page,
+        // totalPages,
+        // currentPage: page,
       },
     });
   } catch (err) {
@@ -147,7 +147,6 @@ async function runDeliveryTest(deliveryTest) {
   return { success: true, message: `Delivery test ${deliveryTest} successful` };
 }
 
-
 // Endpoint to fetch messages
 exports.loadMessages = async (req, res) => {
   try {
@@ -167,23 +166,24 @@ exports.loadMessages = async (req, res) => {
 };
 
 // POST /api/accounts/:account/mailboxes
-exports.loadMailbox =  async (req, res) => {
+exports.loadMailbox = async (req, res) => {
   const { account } = req.params;
 
   try {
+    // Fetch account details from database
     const accountDetails = await Account.findById(account);
     if (!accountDetails) {
       return res.status(404).json({ error: 'Account not found' });
     }
-    
-    await accountData.save();
+
+    // Fetch and save mailboxes for the account
     const mailboxes = await fetchAndSaveMailboxes(accountDetails);
+
     res.status(201).json({ success: true, mailboxes });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch and save mailboxes', details: error.message });
   }
 };
-
 
 exports.sendTestEmail = async (req, res) => {
   const { email, toEmail } = req.body;

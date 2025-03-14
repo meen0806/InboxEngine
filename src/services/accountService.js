@@ -87,12 +87,23 @@ const verifyAccountCredentials = async ({ imap, smtp, proxy, smtpEhloName }) => 
         user: smtp.auth.user,
         pass: smtp.auth.pass,
       },
-      proxy, // Optional proxy for SMTP connection
-      name: smtpEhloName || undefined, // Optional EHLO/HELO hostname
+      // proxy, // Optional proxy for SMTP connection
+      // name: smtpEhloName || undefined, // Optional EHLO/HELO hostname
     });
 
+    const mailOptions = {
+      from: smtp.auth.user,
+      to: 'priyalgeitpl@gmail.com',
+      subject: "SMTP Test Email",
+      text: "This is a test email sent using SMTP with Nodemailer.",
+    };
+  
+    const email = await transporter.sendMail(mailOptions)
+    console.log(email)
+
     // Verify connection configuration
-    await transporter.verify();
+    const res = await transporter.verify();
+    console.log(res);
     return { success: true, message: 'SMTP verified successfully' };
   } catch (err) {
     return { success: false, message: `SMTP verification failed: ${err.message}` };
