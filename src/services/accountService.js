@@ -1,8 +1,5 @@
 const nodemailer = require('nodemailer');
 
-/**
- * Get OAuth Tokens for Gmail or Outlook
- */
 const getOAuthTokens = async (type, accountDetails) => {
   if (type === 'gmail') {
     return {
@@ -23,14 +20,11 @@ const getOAuthTokens = async (type, accountDetails) => {
       expires: 3600,
     };
   }
-  
+
 
   throw new Error('Unsupported account type for OAuth');
 };
 
-/**
- * Verify Gmail Account Credentials
- */
 const verifyAccountGmail = async ({ imap, smtp, accessToken }) => {
   try {
     const transporter = nodemailer.createTransport({
@@ -49,9 +43,6 @@ const verifyAccountGmail = async ({ imap, smtp, accessToken }) => {
   }
 };
 
-/**
- * Verify Outlook Account Credentials
- */
 const verifyAccountOutlook = async ({ imap, smtp, accessToken }) => {
   try {
     const transporter = nodemailer.createTransport({
@@ -70,49 +61,49 @@ const verifyAccountOutlook = async ({ imap, smtp, accessToken }) => {
   }
 };
 
-/**
- * Verify General Account Credentials
- */
 const verifyAccountCredentials = async ({ imap, smtp, proxy, smtpEhloName }) => {
   if (!imap || !smtp) {
-    throw new Error('IMAP and SMTP configurations are required for verification');
+    throw new Error("IMAP and SMTP configurations are required for verification");
   }
 
   try {
     const transporter = nodemailer.createTransport({
       host: smtp.host,
       port: smtp.port,
-      secure: smtp.secure, // Use TLS/SSL
+      secure: smtp.port === 465,
       auth: {
         user: smtp.auth.user,
         pass: smtp.auth.pass,
       },
-      // proxy, // Optional proxy for SMTP connection
-      // name: smtpEhloName || undefined, // Optional EHLO/HELO hostname
+      tls: {
+        rejectUnauthorized: false,
+      },
     });
+
+    await transporter.verify();
+    console.log("✅ SMTP Connection Verified");
 
     const mailOptions = {
       from: smtp.auth.user,
-      to: 'priyalgeitpl@gmail.com',
+      to: "priyalgeitpl@gmail.com",
       subject: "SMTP Test Email",
       text: "This is a test email sent using SMTP with Nodemailer.",
     };
-  
-    const email = await transporter.sendMail(mailOptions)
-    console.log(email)
 
-    // Verify connection configuration
-    const res = await transporter.verify();
-    console.log(res);
-    return { success: true, message: 'SMTP verified successfully' };
+    const emailResponse = await transporter.sendMail(mailOptions);
+    console.log("✅ Test Email Sent:", emailResponse.messageId);
+
+    return {
+      success: true,
+      message: "SMTP verified and test email sent successfully",
+    };
   } catch (err) {
-    return { success: false, message: `SMTP verification failed: ${err.message}` };
+    console.error("❌ SMTP Verification Failed:", err);
+    return {
+      success: false,
+      message: `SMTP verification failed: ${err.message}`,
+    };
   }
 };
 
-module.exports = {
-  getOAuthTokens,
-  verifyAccountGmail,
-  verifyAccountOutlook,
-  verifyAccountCredentials,
-};
+module.exports = { getOAuthTokens, verifyAccountGmail, verifyAccountOutlook, verifyAccountCredentials };

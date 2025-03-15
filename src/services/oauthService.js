@@ -8,10 +8,7 @@ const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_REDIRECT_URI
 );
 
-/**
- * Generate Google OAuth2 Authentication URL
- */
-const generateAuthUrl = (origin=null) => {
+const generateAuthUrl = (origin = null, orgId) => {
   const scopes = [
     "openid",
     "https://www.googleapis.com/auth/gmail.send",
@@ -19,8 +16,9 @@ const generateAuthUrl = (origin=null) => {
     "https://www.googleapis.com/auth/gmail.modify",
     "https://www.googleapis.com/auth/userinfo.profile",
     "https://www.googleapis.com/auth/userinfo.email",
-    
   ];
+
+  const state = JSON.stringify({ origin, orgId });
 
   return (
     "https://accounts.google.com/o/oauth2/v2/auth?" +
@@ -32,16 +30,12 @@ const generateAuthUrl = (origin=null) => {
       access_type: "offline",
       prompt: "consent",
       include_granted_scopes: "true",
-      state: origin,
+      state: encodeURIComponent(state),
     })
   );
 };
 
-/**
- * Handle Callback and Exchange Code for Tokens
- * @param {string} code - Authorization code from Google
- */
-const getTokens = async (code) => {
+const getTokens = async (code, orgId) => {
   const Account = mongoose.model("Account");
 
   try {
@@ -85,6 +79,7 @@ const getTokens = async (code) => {
       };
     }
 
+    account.orgId = orgId;
     await account.save();
 
     return tokens;
@@ -93,43 +88,33 @@ const getTokens = async (code) => {
   }
 };
 
-
-const getUserInfo=async(accessToken) =>{
+const getUserInfo = async (accessToken) => {
   try {
-      const oauth2 = google.oauth2({
-          auth: oauth2Client,
-          version: "v2",
-      });
-      const { data } = await oauth2.userinfo.get({
-          auth: oauth2Client,
-      });
-      return data; 
+    if (!accessToken) {
+      throw new Error("Access token is missing");
+    }
+
+    const response = await axios.get("https://www.googleapis.com/oauth2/v2/userinfo", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    console.log("✅ User info fetched:", response.data);
+    return response.data;
   } catch (error) {
-      console.error("Error fetching user info:", error);
-      throw new Error("Failed to fetch user info");
+    console.error("❌ Failed to fetch user info:", error.response?.data || error.message);
+    throw new Error("Failed to fetch user info");
   }
-}
+};
 
-
-const refreshOAuthToken =  async (account) => {
-
+const refreshOAuthToken = async (account) => {
   try {
     const { oauth2 } = account;
 
-    if (
-      !oauth2 ||
-      !oauth2.clientId ||
-      !oauth2.clientSecret ||
-      !oauth2.tokens.refresh_token
-    ) {
+    if (!oauth2 || !oauth2.clientId || !oauth2.clientSecret || !oauth2.tokens.refresh_token) {
       throw new Error("OAuth2 configuration is missing or invalid");
     }
 
-    const tokenUrl =
-      account.type === "gmail"
-        ? "https://oauth2.googleapis.com/token"
-        : "https://login.microsoftonline.com/common/oauth2/v2.0/token";
-
+    const tokenUrl = "https://oauth2.googleapis.com/token";
     const response = await axios.post(tokenUrl, null, {
       params: {
         client_id: oauth2.clientId,
@@ -140,36 +125,25 @@ const refreshOAuthToken =  async (account) => {
     });
 
     const tokens = response.data;
- 
-    if (!oauth2.tokens.refresh_token) {
-    
-      const newRefreshTokenResponse = await axios.post(
-        "https://oauth2.googleapis.com/token",
-        null,
-        {
-          params: {
-            client_id: oauth2.clientId,
-            client_secret: oauth2.clientSecret,
-            grant_type: "client_credentials",
-          },
-        }
-      );
 
-      const newRefreshTokenData = newRefreshTokenResponse.data;
-      tokens.refresh_token = newRefreshTokenData.refresh_token;
+    if (!tokens.access_token) {
+      throw new Error("OAuth token refresh failed: No access token received.");
     }
+
     account.oauth2.tokens = {
       access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token || oauth2.tokens.refresh_token, 
+      refresh_token: tokens.refresh_token || oauth2.tokens.refresh_token,
       scope: tokens.scope,
       token_type: tokens.token_type,
-      expiry_date: Date.now() + tokens.expires_in * 1000, 
+      expiry_date: Date.now() + tokens.expires_in * 1000,
     };
- 
-    await account.save(); 
 
+    await account.save();
+    console.log("✅ Token refreshed successfully:", account.oauth2.tokens);
+    
     return tokens.access_token;
   } catch (err) {
+    console.error("❌ Failed to refresh OAuth token:", err.response?.data || err.message);
     throw new Error(`Failed to refresh OAuth token: ${err.message}`);
   }
 };

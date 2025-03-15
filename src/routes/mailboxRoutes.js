@@ -22,6 +22,6 @@ router.get('/:account/attachment/:attachment', getAttachment);
 router.get('/delivery-test/check/:deliveryTest', deliveryTest);
 router.post('/:account/load-messages', loadMessages);
 router.post('/:account/loadmailboxes', loadMailbox);
-router.post("/send-test-email",sendTestEmail)
+router.post("/send-test-email", sendTestEmail)
 
 module.exports = router;

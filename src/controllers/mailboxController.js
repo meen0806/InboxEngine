@@ -2,14 +2,10 @@ const Account = require('../models/account');
 const Mailbox = require('../models/mailbox');
 const Message = require('../models/message');
 const Attachment = require('../models/attachment');
-
-const { simpleParser } = require('mailparser');
-const nodemailer = require('nodemailer');
-const ImapFlow = require('imapflow');
-const { fetchAndSaveMessages } = require('../services/mailboxService');
+const { fetchAndSaveMessages } = require('../services/message.service');
 const { fetchAndSaveMailboxes } = require('../services/mailboxService');
-const { sendEmailFromGoogle, sendEmailFromMicrosoft } = require('../util/sendEmail');
-// Get mailboxes
+const { sendEmailFromGoogle, sendEmailFromMicrosoft, sendEmailWithSMTP } = require('../util/sendEmail');
+
 exports.getMailboxes = async (req, res) => {
   try {
     const { account } = req.params;
@@ -20,14 +16,12 @@ exports.getMailboxes = async (req, res) => {
   }
 };
 
-
-// Get messages
 exports.getMessages = async (req, res) => {
   try {
     const { account } = req.params;
     const { mailbox } = req.params;
     // const { page , limit  } = req.query;
-   
+
 
     // if (page < 1 || isNaN(page)) {
     //   return res.status(400).json({
@@ -46,8 +40,8 @@ exports.getMessages = async (req, res) => {
       account_id: account,
       mailbox_id: mailbox,
     })
-      // .skip((page - 1) * limit)
-      // .limit(parseInt(limit));
+    // .skip((page - 1) * limit)
+    // .limit(parseInt(limit));
 
     const totalMessages = await Message.countDocuments({
       account_id: account,
@@ -79,7 +73,6 @@ exports.getMessages = async (req, res) => {
   }
 };
 
-// Get message by ID
 exports.getMessageById = async (req, res) => {
   try {
     const { message } = req.params;
@@ -91,7 +84,6 @@ exports.getMessageById = async (req, res) => {
   }
 };
 
-// Delete messages
 exports.deleteMessages = async (req, res) => {
   try {
     const { account } = req.params;
@@ -103,7 +95,6 @@ exports.deleteMessages = async (req, res) => {
   }
 };
 
-// Search messages
 exports.searchMessages = async (req, res) => {
   try {
     const { account } = req.params;
@@ -115,7 +106,6 @@ exports.searchMessages = async (req, res) => {
   }
 };
 
-// Get attachment
 exports.getAttachment = async (req, res) => {
   try {
     const { attachment } = req.params;
@@ -130,7 +120,6 @@ exports.getAttachment = async (req, res) => {
   }
 };
 
-// Delivery test
 exports.deliveryTest = async (req, res) => {
   try {
     const { deliveryTest } = req.params;
@@ -141,22 +130,15 @@ exports.deliveryTest = async (req, res) => {
   }
 };
 
-// Helper function for delivery test
-async function runDeliveryTest(deliveryTest) {
-  // Simulated logic for testing delivery
-  return { success: true, message: `Delivery test ${deliveryTest} successful` };
-}
-
-// Endpoint to fetch messages
 exports.loadMessages = async (req, res) => {
   try {
     const { account } = req.params;
-    const { criteria} = req.body; 
+    const { criteria } = req.body;
     const accountData = await Account.findById(account);
     if (!accountData) return res.status(404).json({ error: 'Account not found' });
 
     // Fetch and save messages
-    await fetchAndSaveMessages(accountData,criteria);
+    await fetchAndSaveMessages(accountData, criteria);
 
     res.status(200).json({ message: 'Messages loaded successfully' });
   } catch (err) {
@@ -165,7 +147,6 @@ exports.loadMessages = async (req, res) => {
   }
 };
 
-// POST /api/accounts/:account/mailboxes
 exports.loadMailbox = async (req, res) => {
   const { account } = req.params;
 
@@ -188,33 +169,36 @@ exports.loadMailbox = async (req, res) => {
 exports.sendTestEmail = async (req, res) => {
   const { email, toEmail } = req.body;
 
-  const account = await Account.findOne({ email });
-
   if (!email) {
     return res.status(400).json({ message: "Email is required" });
   }
-  let accessToken, expiryTime;
 
-  if (["gmail", "outlook"].includes(account.type)) {
-    accessToken = account?.oauth2?.tokens?.access_token;
-    expiryTime = account?.oauth2?.tokens?.expires_in;
+  const account = await Account.findOne({ email });
+
+  if (!account) {
+    return res.status(404).json({ message: "Account not found" });
   }
 
-  if (account.type === "gmail") {
-    await sendEmailFromGoogle(
-      accessToken,
-      account.email,
-      toEmail,
-      expiryTime,
-      account
-    );
-  } else if (account.type === "outlook") {
-    await sendEmailFromMicrosoft(accessToken, account.email, toEmail);
-  } else if (account.type === "smtp") {
-    await sendEmailWithSMTP(account, toEmail);
-  } else {
-    return res.status(400).json({ message: "Unsupported email provider" });
-  }
+  let accessToken = account?.oauth2?.tokens?.access_token;
+  let expiryTime = account?.oauth2?.tokens?.expiry_date;
 
-  return res.status(200).json({ message: "Email sent suceessfully" });
+  try {
+    if (account.type === "gmail") {
+      await sendEmailFromGoogle(accessToken, account.email, toEmail, expiryTime, account);
+    } else if (account.type === "outlook") {
+      await sendEmailFromMicrosoft(accessToken, account.email, toEmail, expiryTime, account);
+    } else if (account.type === "imap") {
+      await sendEmailWithSMTP(account, toEmail);
+    } else {
+      return res.status(400).json({ message: "Unsupported email provider" });
+    }
+
+    return res.status(200).json({ code: 200, message: "Email sent successfully" });
+  } catch (error) {
+    return res.status(500).json({ code: 500, message: error.message });
+  }
 };
+
+async function runDeliveryTest(deliveryTest) {
+  return { success: true, message: `Delivery test ${deliveryTest} successful` };
+}

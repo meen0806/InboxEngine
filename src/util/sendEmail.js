@@ -1,50 +1,32 @@
 const { default: axios } = require("axios");
-const nodemailer =require("nodemailer");
+const nodemailer = require("nodemailer");
 const { refreshOAuthToken } = require("../services/oauthService");
 const { refreshMicrosoftOAuthToken } = require("../services/outlookService");
 
-
-const sendEmailFromGoogle = async (
-  accessToken,
-  fromEmail,
-  toEmail,
-  expiryTime,
-  expiryDate,
-  account
-) => {
+const sendEmailFromGoogle = async (accessToken, fromEmail, toEmail, expiryTime, account) => {
   if (!toEmail) {
-    throw new Error(" Recipient email address is missing!");
-    return;
+    throw new Error("Recipient email address is missing!");
   }
 
-  const isTokenExpired = (tokenExpiryTime) => {
-    const currentTime = Date.now();
-
-    return currentTime >= tokenExpiryTime;
+  const isTokenExpired = (expiryDate) => {
+    return Date.now() >= expiryDate;
   };
 
-  if (isTokenExpired( expiryTime)) {
+  // Check and refresh token if expired
+  if (isTokenExpired(account.oauth2.tokens.expiry_date)) {
+    console.log("🔄 Access token expired, refreshing...");
     accessToken = await refreshOAuthToken(account);
   }
 
-  if (isTokenExpired(expiryTime)) {
-    // Check if refresh token exists before refreshing
-    if (!account.oauth2.tokens.refresh_token) {
-      throw new Error(
-        "Missing refresh token. Please log in again to generate a new one."
-      );
-    }
+  console.log("📨 Sending email with token:", accessToken);
 
-    accessToken = await refreshOAuthToken(account);
-  }
-  const emailContent = `From: ${fromEmail}
-To: ${toEmail}
-Subject: Google OAuth Email Test
-Content-Type: text/plain; charset="UTF-8"
+  const emailContent = 
+  `From: <${fromEmail}>\r\n` +
+  `To: <${toEmail}>\r\n` +
+  `Subject: Google OAuth Email Test\r\n` +
+  `Content-Type: text/plain; charset="UTF-8"\r\n\r\n` +
+  `This is a test email sent from the logged-in Google account using OAuth authentication.`;
 
-This is a test email sent from the logged-in Google account using OAuth authentication.`;
-
-  // Convert to Base64 (correct format)
   const encodedMessage = Buffer.from(emailContent)
     .toString("base64")
     .replace(/\+/g, "-")
@@ -62,13 +44,17 @@ This is a test email sent from the logged-in Google account using OAuth authenti
         },
       }
     );
+
+    console.log("✅ Email sent successfully:", response.status);
+    return response.data;
   } catch (error) {
-    throw new Error("Something went wrong");
+    console.error("❌ Error sending email via Google:", error.response?.data || error.message);
+    throw new Error("Failed to send email via Google.");
   }
 };
 
 const sendEmailWithSMTP = async (account, toEmail) => {
- 
+
   if (!toEmail) {
     throw new Error("Recipient email address is missing!");
   }
@@ -98,7 +84,7 @@ const sendEmailWithSMTP = async (account, toEmail) => {
   }
 };
 
-const sendEmailFromMicrosoft = async (accessToken, fromEmail, toEmail,expiryTime) => {
+const sendEmailFromMicrosoft = async (accessToken, fromEmail, toEmail, expiryTime) => {
   if (!accessToken) {
     throw new Error("Access token is required!");
   }
@@ -111,7 +97,7 @@ const sendEmailFromMicrosoft = async (accessToken, fromEmail, toEmail,expiryTime
     return currentTime >= tokenExpiryTime;
   };
 
-  if (isTokenExpired( expiryTime)) {
+  if (isTokenExpired(expiryTime)) {
     accessToken = await refreshOAuthToken(account);
   }
 
@@ -169,4 +155,4 @@ const sendEmailFromMicrosoft = async (accessToken, fromEmail, toEmail,expiryTime
   }
 };
 
-module.exports = { sendEmailFromGoogle,sendEmailWithSMTP,sendEmailFromMicrosoft };
+module.exports = { sendEmailFromGoogle, sendEmailWithSMTP, sendEmailFromMicrosoft };

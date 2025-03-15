@@ -7,29 +7,24 @@ const CLIENT_ID = process.env.MICROSOFT_CLIENT_ID;
 const CLIENT_SECRET = process.env.MICROSOFT_CLIENT_SECRET;
 const REDIRECT_URI = process.env.MICROSOFT_REDIRECT_URI;
 
-/**
- * Generate Microsoft OAuth2 Authentication URL
- */
-const getAuthUrl = (origin) => {
+const getAuthUrl = (origin, orgId) => {
+  const state = JSON.stringify({ origin, orgId });
   const params = querystring.stringify({
     client_id: CLIENT_ID,
     response_type: "code",
     redirect_uri: REDIRECT_URI,
     response_mode: "query",
     scope: "openid profile email User.Read offline_access",
-    state: origin,
-    prompt:"select_account"
+    state: encodeURIComponent(state),
+    prompt: "select_account"
   });
 
   return `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params}`;
 };
 
-/**
- * Exchange authorization code for access token
- */
-const getAccessToken = async (code) => {
+const getAccessToken = async (code, orgId) => {
+  const Account = mongoose.model("Account");
 
-   const Account = mongoose.model("Account");
   try {
     const tokenResponse = await axios.post(
       "https://login.microsoftonline.com/common/oauth2/v2.0/token",
@@ -43,11 +38,9 @@ const getAccessToken = async (code) => {
       { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
     );
 
-    const { access_token, refresh_token, scope, token_type, expires_in } =
-      tokenResponse.data;
+    const { access_token, refresh_token, scope, token_type, expires_in } = tokenResponse.data;
 
     const userInfo = await getUserDetails(access_token);
-
     const email = userInfo.userPrincipalName || userInfo.mail;
     const username = email.split("@")[0];
 
@@ -59,22 +52,18 @@ const getAccessToken = async (code) => {
         name: username,
         account: userInfo.mail,
         type: "outlook",
+        orgId,
         oauth2: {
           authorize: true,
           clientId: process.env.CLIENT_ID,
           clientSecret: process.env.CLIENT_SECRET,
           redirectUri: process.env.REDIRECT_URI,
-          tokens: {
-            access_token,
-            refresh_token,
-            scope,
-            token_type,
-            expires_in,
-          },
+          tokens: { access_token, refresh_token, scope, token_type, expires_in },
         },
         createdAt: new Date(),
       });
     } else {
+      account.orgId = orgId;
       account.oauth2 = {
         authorize: true,
         clientId: process.env.CLIENT_ID,
@@ -92,13 +81,10 @@ const getAccessToken = async (code) => {
   }
 };
 
-/**
- * Fetch user details from Microsoft Graph API
- */
 const getUserDetails = async (accessToken) => {
   try {
     const userResponse = await axios.get("https://graph.microsoft.com/v1.0/me?$select=id,displayName,mail", {
-        headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
 
     return userResponse.data;
@@ -128,10 +114,10 @@ const refreshMicrosoftOAuthToken = async (account) => {
     const { access_token, refresh_token, expires_in, token_type, scope } =
       tokenResponse.data;
 
-   
+
     account.oauth2.tokens = {
       access_token,
-      refresh_token, 
+      refresh_token,
       expires_in,
       token_type,
       scope,
@@ -146,10 +132,4 @@ const refreshMicrosoftOAuthToken = async (account) => {
   }
 };
 
-
-module.exports = {
-  getAuthUrl,
-  getAccessToken,
-  getUserDetails,
-  refreshMicrosoftOAuthToken
-};
+module.exports = { getAuthUrl, getAccessToken, getUserDetails, refreshMicrosoftOAuthToken };

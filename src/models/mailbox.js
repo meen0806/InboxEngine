@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const mailboxSchema = new mongoose.Schema({
   account: { type: mongoose.Schema.Types.ObjectId, ref: 'Account', required: true },
-  path: { type: String, required: true },
+  path: { type: String, required: false },
   name: { type: String, required: true },
   delimiter: { type: String },
   totalMessages: { type: Number, default: 0 },

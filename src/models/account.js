@@ -7,6 +7,7 @@ const accountSchema = new mongoose.Schema({
   account: { type: String },
   name: { type: String, required: true },
   email: { type: String },
+  orgId: {type: String, required: true},
   type: { type: String, enum: ['imap', 'gmail', 'outlook'], required: true },
   state: { type: String, enum: ['init', 'connected', 'error'] },
   path: [{ type: String }],

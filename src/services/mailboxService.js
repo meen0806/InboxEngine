@@ -2,184 +2,231 @@ const { ImapFlow } = require("imapflow");
 const { simpleParser } = require("mailparser");
 const Message = require("../models/message");
 const Mailbox = require("../models/mailbox");
-const Attachment = require("../models/attachment");
-const message = require("../models/message");
+const { google } = require("googleapis");
 
-const STATIC_SEARCH_CRITERIA = [
-  "SINCE",
-  new Date("2025-01-01T00:00:00Z").toISOString(),
-];
+async function openMailboxSafely(client, mailbox) {
+  const mailboxes = await client.list();
+  const mailboxExists = mailboxes.some(m => m.path === mailbox);
 
-const fetchAndSaveMessages = async (account, criteria) => {
-  if (account.type === "gmail" || account.type === "outlook") {
-    const accessToken = await refreshOAuthToken(account);
-    account.imap.auth.accessToken = accessToken;
+  if (!mailboxExists) {
+    console.warn(`⚠️ Skipping non-existent mailbox: ${mailbox}`);
+    return false;
   }
 
-  const { imap, type, oauth2 } = account;
+  await client.mailboxOpen(mailbox);
+  return true;
+}
 
-  const imapConfig =
-    type === "gmail" || type === "outlook"
-      ? {
-          host: type === "gmail" ? "imap.gmail.com" : "outlook.office365.com",
-          port: 993,
-          secure: true,
-          auth: {
-            user: imap.auth.user,
-            accessToken: oauth2.tokens?.access_token,
-          },
-        }
-      : {
-          host: imap.host,
-          port: imap.port,
-          secure: imap.secure,
-          auth: {
-            user: imap.auth.user,
-            pass: imap.auth.pass,
-          },
-        };
+const refreshOAuthToken = async (account) => {
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI
+  );
 
-  const client = new ImapFlow(imapConfig);
+  const refreshToken = account.oauth2.tokens.refresh_token || process.env.GOOGLE_REFRESH_TOKEN;
+  if (!refreshToken) {
+    throw new Error("❌ No refresh token available!");
+  }
+
+  oauth2Client.setCredentials({ refresh_token: refreshToken });
+
+  const { credentials } = await oauth2Client.refreshAccessToken();
+  return credentials.access_token;
+};
+
+const fetchAndSaveMessages = async (account, criteria) => {
   try {
-    await client.connect();
+    if (account.type === "gmail" || account.type === "outlook") {
+      const accessToken = await refreshOAuthToken(account);
+      account.imap.auth = { user: account.imap.auth.user, accessToken };
+    }
 
-    // Get all mailboxes associated with the account
+    const { imap, type } = account;
+    const imapConfig = type === "gmail" || type === "outlook"
+      ? {
+        host: type === "gmail" ? "imap.gmail.com" : "outlook.office365.com",
+        port: 993,
+        secure: true,
+        auth: account.imap.auth,
+      }
+      : {
+        host: imap.host,
+        port: imap.port,
+        secure: imap.secure,
+        auth: imap.auth,
+      };
+
+    const client = new ImapFlow(imapConfig);
+    await client.connect();
+    console.log("✅ Connected to IMAP Server");
+
     const mailboxes = await Mailbox.find({ account: account._id });
 
     for (const mailbox of mailboxes) {
+      if (mailbox.totalMessages === 0) {
+        console.log(`📭 Skipping empty mailbox: ${mailbox.name}`);
+        continue;
+      }
+
       let lock;
       try {
         lock = await client.getMailboxLock(mailbox.path);
+        console.log(`📂 Fetching emails from: ${mailbox.name}`);
 
-        let lastDate = criteria.lastFetchedMessage ? new Date(criteria.lastFetchedMessage) : null;
-
-        const newMessages = await Message.find({
-          createdAt: { $gt:lastDate },
-        }).sort({ createdAt: -1 });
-      
-        const searchCriteria = lastDate ? ["SINCE",  lastDate.toUTCString()] : "ALL";
-      
-        // Fetch messages for this mailbox
-        for await (const message of client.fetch(searchCriteria, {
-          envelope: true,
-          source: true,
-        })) {
-          // console.log(`${message.uid}: ${message.envelope.subject}`);
-          const parsedMessage = await simpleParser(message.source);
-
-          // Check if message exists in the database
-          const existingMessage = await Message.findOne({
-            account: account._id,
-            uid: message.uid,
-          });
-
-          if (existingMessage) continue;
-
-          // Transform headers to strings
-          const transformedHeaders = {};
-          for (const [key, value] of parsedMessage.headers) {
-            transformedHeaders[key] =
-              typeof value === "object" ? JSON.stringify(value) : value;
+        // Fetch only 10 emails
+        let count = 0;
+        for await (const msg of client.fetch("1:10", { uid: true, envelope: true, source: true })) {
+          if (!msg.source) {
+            console.warn(`⚠️ No source found for UID: ${msg.uid}`);
+            continue;
           }
 
-          const from =
-            parsedMessage.from?.value.map((v) => ({
-              name: v.name || "",
-              address: v.address,
-            })) || [];
+          console.log(`📩 Found email: ${msg.envelope.subject}`);
 
-          const to =
-            parsedMessage.to?.value.map((v) => ({
-              name: v.name || "",
-              address: v.address,
-            })) || [];
-
-          // Save the message
+          const parsedMessage = await simpleParser(msg.source);
           const newMessage = new Message({
             account: account._id,
             mailbox: mailbox._id,
-            uid: message.uid,
+            uid: msg.uid,
             subject: parsedMessage.subject || "",
-            from,
-            to,
+            from: parsedMessage.from?.value || [],
+            to: parsedMessage.to?.value || [],
             date: parsedMessage.date || new Date(),
             body: parsedMessage.text || parsedMessage.html || "",
-            flags: message.flags || [],
-            headers: transformedHeaders,
+            flags: msg.flags || [],
           });
 
-          // Save attachments
-          if (
-            parsedMessage.attachments &&
-            parsedMessage.attachments.length > 0
-          ) {
-            const attachments = await Promise.all(
-              parsedMessage.attachments.map(async (attachment) => {
-                const newAttachment = new Attachment({
-                  message: newMessage._id,
-                  filename: attachment.filename,
-                  contentType: attachment.contentType,
-                  content: attachment.content,
-                  size: attachment.size,
-                });
-                await newAttachment.save();
-                return newAttachment._id;
-              })
-            );
-            newMessage.attachments = attachments;
-          }
+          await newMessage.save();
+          console.log(`✅ Saved message: ${newMessage.uid}`);
 
-          const mes = await newMessage.save();
-
-          console.log("mes", mes);
+          count++;
+          if (count >= 10) break; // Stop fetching after 10 emails
         }
       } catch (err) {
-        console.error(
-          `Error processing mailbox ${mailbox.path}: ${err.message}`
-        );
+        console.error(`❌ Error processing mailbox ${mailbox.path}: ${err.message}`);
       } finally {
         if (lock) lock.release();
       }
     }
 
     await client.logout();
-    console.log(`Finished fetching messages for account ${account.account}`);
+    console.log(`🎉 Finished fetching messages for account ${account.account}`);
   } catch (err) {
-    console.error(
-      `Error fetching messages for account ${account.account}: ${err.message}`
-    );
+    console.error(`❌ Error fetching messages for account ${account.account}: ${err.message}`);
   }
 };
 
 const fetchAndSaveMailboxes = async (accountDetails) => {
-  const client = new ImapFlow({
-    host: accountDetails.imap.host,
-    port: accountDetails.imap.port,
-    secure: accountDetails.imap.secure,
-    auth: {
-      user: accountDetails.imap.auth.user,
-      pass: accountDetails.imap.auth.pass,
-    },
-  });
-
   try {
-    await client.connect();
-    const mailboxes = await client.list();
-    await client.logout();
+    let mailboxes = [];
 
-    // Transform and save mailboxes
-    const mailboxDocuments = mailboxes.map((mailbox) => ({
-      account: accountDetails._id,
-      name: mailbox.name,
-      path: mailbox.path,
+    if (accountDetails.type === "gmail") {
+      const accessToken = await refreshOAuthToken(accountDetails);
+      mailboxes = await fetchGmailMailboxes(accessToken);
+      mailboxes = mailboxes.labels;
+    } else if (accountDetails.type === "outlook") {
+      const accessToken = await refreshOAuthToken(accountDetails);
+      mailboxes = await fetchOutlookMailboxes(accessToken);
+      mailboxes = mailboxes.labels;
+    } else {
+      let authConfig = {
+        user: accountDetails.imap.auth.user,
+        pass: accountDetails.imap.auth.pass,
+      };
+
+      const client = new ImapFlow({
+        host: accountDetails.imap.host,
+        port: accountDetails.imap.port,
+        secure: accountDetails.imap.secure,
+        auth: authConfig,
+      });
+
+      await client.connect();
+      console.log("✅ Connected to IMAP");
+
+      // Fetch list of mailboxes
+      mailboxes = await client.list();
+      const mailboxDocuments = [];
+
+      for (const mailbox of mailboxes) {
+        console.log(`📂 Checking mailbox: ${mailbox.name}`);
+
+        try {
+          // Open the mailbox to fetch status
+          await client.mailboxOpen(mailbox.path);
+
+          // Get message counts
+          const status = await client.status(mailbox.path, ["messages", "unseen"]);
+
+          mailboxDocuments.push({
+            account: accountDetails._id,
+            name: mailbox.name,
+            path: mailbox.path,
+            totalMessages: status.messages || 0,
+            unseenMessages: status.unseen || 0,
+            updatedAt: new Date(),
+          });
+        } catch (err) {
+          console.error(`❌ Error fetching status for ${mailbox.name}: ${err.message}`);
+        }
+      }
+
+      await client.logout();
+      console.log("📭 Mailbox fetching completed.");
+
+      // Save to database
+      await Mailbox.insertMany(mailboxDocuments);
+
+      return mailboxDocuments;
+    }
+  } catch (error) {
+    console.error("❌ Error fetching mailboxes:", error.message);
+    throw error;
+  }
+};
+
+const fetchGmailMailboxes = async (accessToken) => {
+  try {
+    const oauth2Client = new google.auth.OAuth2();
+    oauth2Client.setCredentials({ access_token: accessToken });
+
+    const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+
+    const labelsRes = await gmail.users.labels.list({ userId: "me" });
+    const labels = labelsRes.data.labels.map(label => ({
+      name: label.name,
+      id: label.id,
     }));
 
-    // Save to the database
-    await Mailbox.insertMany(mailboxDocuments);
+    // Fetch total messages count
+    const profileRes = await gmail.users.getProfile({ userId: "me" });
+    const totalMessages = profileRes.data.messagesTotal || 0;
+    const unreadMessages = profileRes.data.threadsTotal || 0;
 
-    return mailboxDocuments; // Return the saved mailboxes
+    return {
+      labels,
+      totalMessages,
+      unreadMessages,
+    };
   } catch (error) {
-    console.error("Error fetching and saving mailboxes:", error.message);
+    console.error("❌ Error fetching Gmail mailboxes:", error.message);
+    throw error;
+  }
+};
+
+const fetchOutlookMailboxes = async (accessToken) => {
+  try {
+    const res = await axios.get("https://graph.microsoft.com/v1.0/me/mailFolders", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    return res.data.value.map(folder => ({
+      name: folder.displayName,
+      id: folder.id,
+    }));
+  } catch (error) {
+    console.error("❌ Error fetching Outlook mailboxes:", error.message);
     throw error;
   }
 };
