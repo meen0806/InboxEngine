@@ -114,7 +114,6 @@ const refreshMicrosoftOAuthToken = async (account) => {
     const { access_token, refresh_token, expires_in, token_type, scope } =
       tokenResponse.data;
 
-
     account.oauth2.tokens = {
       access_token,
       refresh_token,

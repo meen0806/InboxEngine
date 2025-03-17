@@ -19,6 +19,13 @@ exports.listAccounts = async (req, res) => {
 
 exports.createAccount = async (req, res) => {
   try {
+    const { email } = req.body;
+
+    const existingAccount = await Account.findOne({ email });
+    if (existingAccount) {
+      return res.status(400).json({ code: 400, message: "Account with this email already exists" });
+    }
+
     const newAccount = new Account(req.body);
 
     const result = await verifyAccountCallback(newAccount);
@@ -29,9 +36,7 @@ exports.createAccount = async (req, res) => {
     await newAccount.save();
     res.status(201).json(newAccount);
   } catch (err) {
-    res
-      .status(400)
-      .json({ error: "Failed to create account", details: err.message });
+    res.status(400).json({ error: "Failed to create account", details: err.message });
   }
 };
 
@@ -47,16 +52,24 @@ exports.getAccountById = async (req, res) => {
 
 exports.updateAccount = async (req, res) => {
   try {
-    const updatedAccount = await Account.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true }
-    );
-    if (!updatedAccount)
+    const { id } = req.params;
+    const existingAccount = await Account.findById(id);
+    if (!existingAccount) {
       return res.status(404).json({ error: "Account not found" });
+    }
+
+    Object.assign(existingAccount, req.body);
+
+    const result = await verifyAccountCallback(existingAccount);
+    if (!result.success) {
+      return res.status(400).json({ code: 400, message: "Failed to update account, SMTP verification failed" });
+    }
+
+    const updatedAccount = await existingAccount.save();
+
     res.status(200).json(updatedAccount);
   } catch (err) {
-    res.status(400).json({ error: "Failed to update account" });
+    res.status(400).json({ error: "Failed to update account", details: err.message });
   }
 };
 
@@ -102,28 +115,25 @@ exports.verifyAccount = async (req, res) => {
 
 exports.searchAccounts = async (req, res) => {
   try {
-    const { name, email } = req.query;
-    let filter = {};
+    const { name, email, orgId } = req.query;
+
+    if (!name && !email) {
+      return res.status(400).json({ error: "Please provide a name or email to search" });
+    }
+
+    let filter = { orgId };
 
     if (email) {
       filter.email = { $regex: email, $options: "i" };
-    } else if (name) {
-      filter.name = { $regex: name, $options: "i" };
-    } else {
-      return res
-        .status(400)
-        .json({ error: "Please provide a name or email to search" });
     }
-
-    if (!name && !email) {
-      return res
-        .status(400)
-        .json({ error: "Please provide a name or email to search" });
+    if (name) {
+      filter.name = { $regex: name, $options: "i" };
     }
 
     const accounts = await Account.find(filter);
     res.status(200).json(accounts);
   } catch (err) {
-    res.status(500).json({ error: "Failed to fetch accounts" });
+    res.status(500).json({ error: "Failed to fetch accounts", details: err.message });
   }
 };
+

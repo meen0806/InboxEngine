@@ -20,41 +20,21 @@ exports.getMessages = async (req, res) => {
   try {
     const { account } = req.params;
     const { mailbox } = req.params;
-    // const { page , limit  } = req.query;
 
-
-    // if (page < 1 || isNaN(page)) {
-    //   return res.status(400).json({
-    //     status: "fail",
-    //     message: "Invalid page number. Page must be a positive integer.",
-    //   });
-    // }
-
-    // if (limit < 1 || isNaN(limit) || limit > 50) {
-    //   return res.status(400).json({
-    //     status: "fail",
-    //     message: "Invalid limit. Limit must be a positive integer (max: 50).",
-    //   });
-    // }
     const messages = await Message.find({
       account_id: account,
       mailbox_id: mailbox,
     })
-    // .skip((page - 1) * limit)
-    // .limit(parseInt(limit));
 
     const totalMessages = await Message.countDocuments({
       account_id: account,
       mailbox_id: mailbox,
     });
-    // const totalPages = Math.ceil(totalMessages / limit);
     if (!messages.length) {
       return res.status(404).json({
         status: "fail",
         message: "No messages found for the given account and mailbox.",
-        totalMessages,
-        // totalPages,
-        // currentPage: page,
+        totalMessages
       });
     }
 
@@ -134,16 +114,19 @@ exports.loadMessages = async (req, res) => {
   try {
     const { account } = req.params;
     const { criteria } = req.body;
+
     const accountData = await Account.findById(account);
-    if (!accountData) return res.status(404).json({ error: 'Account not found' });
+    if (!accountData) {
+      return res.status(404).json({ error: "❌ Account not found" });
+    }
 
     // Fetch and save messages
-    await fetchAndSaveMessages(accountData, criteria);
+    const messages = await fetchAndSaveMessages(accountData, criteria);
 
-    res.status(200).json({ message: 'Messages loaded successfully' });
+    res.status(200).json({ message: "✅ Messages loaded successfully", messages });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to load messages', details: err.message });
+    console.error("❌ Error loading messages:", err.message);
+    res.status(500).json({ error: "❌ Failed to load messages", details: err.message });
   }
 };
 

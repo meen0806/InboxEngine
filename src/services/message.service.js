@@ -24,39 +24,22 @@ const refreshOAuthToken = async (account) => {
   return credentials.access_token;
 };
 
-const saveMessagesToDatabase = async (messages) => {
+const saveMessagesToDatabase = async (accountId, messages) => {
   try {
     for (const message of messages) {
-      const existingMessage = await Message.findOne({
-        account: message.account,
-        uid: message.uid,
-      });
+      const existingMessage = await Message.findOne({ account: accountId, uid: message.uid });
 
-      if (existingMessage) continue;
-
-      if (message.attachments && message.attachments.length > 0) {
-        const savedAttachments = await Promise.all(
-          message.attachments.map(async (attachment) => {
-            const newAttachment = new Attachment({
-              message: message._id,
-              filename: attachment.filename,
-              contentType: attachment.contentType,
-              content: attachment.content,
-              size: attachment.size,
-            });
-            await newAttachment.save();
-            return newAttachment._id;
-          })
-        );
-        message.attachments = savedAttachments;
+      if (existingMessage) {
+        console.log(`🔄 Updating existing message: ${message.subject}`);
+        await Message.updateOne({ _id: existingMessage._id }, message);
+      } else {
+        console.log(`✅ Saving new message: ${message.subject}`);
+        await Message.create(message);
       }
-
-      const savedMessage = new Message(message);
-      await savedMessage.save();
-      console.log(`✅ Saved message: ${savedMessage.subject}`);
     }
-  } catch (err) {
-    console.error("❌ Error saving messages:", err.message);
+  } catch (error) {
+    console.error("❌ Error saving messages:", error.message);
+    throw error;
   }
 };
 
@@ -65,33 +48,36 @@ const fetchAndSaveMessages = async (account, criteria) => {
     let messages = [];
 
     if (account.type === "gmail") {
-      const accessToken = await refreshOAuthToken(account);
       messages = await fetchGmailMessages(account);
     } else if (account.type === "outlook") {
-      const accessToken = await refreshOAuthToken(account);
       messages = await fetchOutlookMessages(account);
     } else {
       messages = await fetchIMAPMessages(account, criteria);
     }
 
-    await saveMessagesToDatabase(messages);
-    console.log(`🎉 Finished fetching messages for account ${account.account}`);
+    await saveMessagesToDatabase(account._id, messages);
+    console.log(`🎉 Finished fetching and saving messages for account ${account._id}`);
+
+    return messages;
   } catch (err) {
-    console.error(`❌ Error fetching messages for account ${account.account}: ${err.message}`);
+    console.error(`❌ Error fetching messages for account ${account._id}: ${err.message}`);
+    throw err;
   }
 };
 
 const fetchGmailMessages = async (account) => {
   try {
     const accessToken = await refreshOAuthToken(account);
+    if (!accessToken) throw new Error("❌ Failed to refresh OAuth token for Gmail");
+
     const oauth2Client = new google.auth.OAuth2();
     oauth2Client.setCredentials({ access_token: accessToken });
 
     const gmail = google.gmail({ version: "v1", auth: oauth2Client });
-
     const res = await gmail.users.messages.list({ userId: "me", maxResults: 50 });
 
     const messages = [];
+
     for (const msg of res.data.messages || []) {
       const msgRes = await gmail.users.messages.get({ userId: "me", id: msg.id });
 
@@ -131,17 +117,19 @@ const fetchGmailMessages = async (account) => {
 const fetchOutlookMessages = async (account) => {
   try {
     const accessToken = await refreshOAuthToken(account);
+    if (!accessToken) throw new Error("❌ Failed to refresh OAuth token for Outlook");
+
     const res = await axios.get("https://graph.microsoft.com/v1.0/me/messages", {
       headers: { Authorization: `Bearer ${accessToken}` },
       params: { $top: 10 },
     });
 
-    return res.data.value.map(msg => ({
+    return res.data.value.map((msg) => ({
       account: account._id,
       uid: msg.id,
       subject: msg.subject || "",
       from: msg.from?.emailAddress?.address || "",
-      to: msg.toRecipients?.map(r => r.emailAddress?.address) || [],
+      to: msg.toRecipients?.map((r) => r.emailAddress?.address) || [],
       date: new Date(msg.receivedDateTime),
       body: msg.body?.content || "",
     }));
@@ -153,19 +141,19 @@ const fetchOutlookMessages = async (account) => {
 
 const fetchIMAPMessages = async (account, criteria) => {
   try {
-    const imapConfig = {
+    const client = new ImapFlow({
       host: account.imap.host,
-      port: account.imap.port,
-      secure: account.imap.secure,
+      port: account.imap.port || 993,
+      secure: true,
       auth: {
         user: account.imap.auth.user,
         pass: account.imap.auth.pass,
       },
-    };
+      logger: console,
+    });
 
-    const client = new ImapFlow(imapConfig);
     await client.connect();
-    console.log("✅ Connected to IMAP Server");
+    console.log("✅ IMAP Connected successfully");
 
     const mailboxes = await Mailbox.find({ account: account._id });
     let messages = [];

@@ -2,7 +2,6 @@ const mongoose = require('mongoose');
 const { verifyAccountCallback } = require('../callbacks/accountCallback');
 const { sendEmailFromGoogle, sendEmailWithSMTP } = require('../util/sendEmail');
 
-
 const accountSchema = new mongoose.Schema({
   account: { type: String },
   name: { type: String, required: true },
@@ -14,6 +13,8 @@ const accountSchema = new mongoose.Schema({
   subconnections: [{ type: String }],
   webhooks: { type: String },
   copy: { type: Boolean },
+  msg_per_day: { type: Number },
+  time_gap: { type: Number },
   logs: { type: Boolean, default: false },
   notifyFrom: { type: Date, default: Date.now },
   proxy: { type: String },
