@@ -131,9 +131,7 @@ exports.searchAccounts = async (req, res) => {
     const { query, orgId } = req.query;
 
     let filter = { orgId };
-    if (orgId) {
-      throw new Error("Organization id is required");
-    }
+   
 
     filter.$or = [
       { email: { $regex: query, $options: "i" } },
