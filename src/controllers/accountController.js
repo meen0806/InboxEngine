@@ -67,7 +67,7 @@ exports.updateAccount = async (req, res) => {
 
     const updatedAccount = await existingAccount.save();
 
-    res.status(200).json(updatedAccount);
+    res.status(200).json({code: 200, message: "Acount details updated successfully", data: updatedAccount});
   } catch (err) {
     res.status(400).json({ error: "Failed to update account", details: err.message });
   }
