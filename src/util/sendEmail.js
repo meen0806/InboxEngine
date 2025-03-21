@@ -3,7 +3,7 @@ const nodemailer = require("nodemailer");
 const { refreshOAuthToken } = require("../services/oauthService");
 const { refreshMicrosoftOAuthToken } = require("../services/outlookService");
 
-const sendEmailFromGoogle = async (accessToken, fromEmail, toEmail, expiryTime, account) => {
+const sendEmailFromGoogle = async (accessToken, fromEmail, toEmail, expiryTime, account,emailbody) => {
   if (!toEmail) {
     throw new Error("Recipient email address is missing!");
   }
@@ -20,12 +20,12 @@ const sendEmailFromGoogle = async (accessToken, fromEmail, toEmail, expiryTime, 
 
   console.log("📨 Sending email with token:", accessToken);
 
-  const emailContent = 
-  `From: <${fromEmail}>\r\n` +
-  `To: <${toEmail}>\r\n` +
-  `Subject: Google OAuth Email Test\r\n` +
-  `Content-Type: text/plain; charset="UTF-8"\r\n\r\n` +
-  `This is a test email sent from the logged-in Google account using OAuth authentication.`;
+  const emailContent =
+    `From: <${fromEmail}>\r\n` +
+    `To: <${toEmail}>\r\n` +
+    `Subject: ${emailbody.subject}\r\n` +
+    `Content-Type: text/plain; charset="UTF-8"\r\n\r\n` +
+    `${emailbody.emailBody}`;
 
   const encodedMessage = Buffer.from(emailContent)
     .toString("base64")
@@ -53,7 +53,7 @@ const sendEmailFromGoogle = async (accessToken, fromEmail, toEmail, expiryTime, 
   }
 };
 
-const sendEmailWithSMTP = async (account, toEmail) => {
+const sendEmailWithSMTP = async (account, toEmail,emailbody) => {
 
   if (!toEmail) {
     throw new Error("Recipient email address is missing!");
@@ -84,7 +84,7 @@ const sendEmailWithSMTP = async (account, toEmail) => {
   }
 };
 
-const sendEmailFromMicrosoft = async (accessToken, fromEmail, toEmail, expiryTime) => {
+const sendEmailFromMicrosoft = async (accessToken, fromEmail, toEmail, expiryTime,emailbody) => {
   if (!accessToken) {
     throw new Error("Access token is required!");
   }
