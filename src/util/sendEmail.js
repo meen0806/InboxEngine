@@ -72,8 +72,8 @@ const sendEmailWithSMTP = async (account, toEmail,emailbody) => {
   const mailOptions = {
     from: account.smtp.auth.user,
     to: toEmail,
-    subject: "SMTP Test Email",
-    text: "This is a test email sent using SMTP with Nodemailer.",
+    subject: emailbody.subject,
+    text: emailbody.emailBody
   };
 
   try {
@@ -114,11 +114,11 @@ const sendEmailFromMicrosoft = async (accessToken, fromEmail, toEmail, expiryTim
 
   const emailData = {
     message: {
-      subject: "Test Email from Microsoft OAuth2",
+      subject: emailbody.subject,
       body: {
         contentType: "Text",
         content:
-          "This is a test email sent via Microsoft Graph API using OAuth2.",
+        emailbody.emailBody
       },
       toRecipients: [
         {
