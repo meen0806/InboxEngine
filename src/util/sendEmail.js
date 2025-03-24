@@ -3,7 +3,7 @@ const nodemailer = require("nodemailer");
 const { refreshOAuthToken } = require("../services/oauthService");
 const { refreshMicrosoftOAuthToken } = require("../services/outlookService");
 
-const sendEmailFromGoogle = async (accessToken, fromEmail, toEmail, expiryTime, account,emailbody) => {
+const sendEmailFromGoogle = async (accessToken, fromEmail, toEmail, expiryTime, account,emailTemplate) => {
   if (!toEmail) {
     throw new Error("Recipient email address is missing!");
   }
@@ -23,9 +23,9 @@ const sendEmailFromGoogle = async (accessToken, fromEmail, toEmail, expiryTime, 
   const emailContent =
     `From: <${fromEmail}>\r\n` +
     `To: <${toEmail}>\r\n` +
-    `Subject: ${emailbody.subject}\r\n` +
+    `Subject: ${emailTemplate.subject}\r\n` +
     `Content-Type: text/plain; charset="UTF-8"\r\n\r\n` +
-    `${emailbody.emailBody}`;
+    `${emailTemplate.emailBody}`;
 
   const encodedMessage = Buffer.from(emailContent)
     .toString("base64")
@@ -53,7 +53,7 @@ const sendEmailFromGoogle = async (accessToken, fromEmail, toEmail, expiryTime, 
   }
 };
 
-const sendEmailWithSMTP = async (account, toEmail,emailbody) => {
+const sendEmailWithSMTP = async (account, toEmail,emailTemplate) => {
 
   if (!toEmail) {
     throw new Error("Recipient email address is missing!");
@@ -72,8 +72,8 @@ const sendEmailWithSMTP = async (account, toEmail,emailbody) => {
   const mailOptions = {
     from: account.smtp.auth.user,
     to: toEmail,
-    subject: emailbody.subject,
-    text: emailbody.emailBody
+    subject: emailTemplate.subject,
+    text: emailTemplate.emailBody
   };
 
   try {
@@ -84,7 +84,7 @@ const sendEmailWithSMTP = async (account, toEmail,emailbody) => {
   }
 };
 
-const sendEmailFromMicrosoft = async (accessToken, fromEmail, toEmail, expiryTime,emailbody) => {
+const sendEmailFromMicrosoft = async (accessToken, fromEmail, toEmail, expiryTime,emailTemplate) => {
   if (!accessToken) {
     throw new Error("Access token is required!");
   }
@@ -114,11 +114,11 @@ const sendEmailFromMicrosoft = async (accessToken, fromEmail, toEmail, expiryTim
 
   const emailData = {
     message: {
-      subject: emailbody.subject,
+      subject: emailTemplate.subject,
       body: {
         contentType: "Text",
         content:
-        emailbody.emailBody
+        emailTemplate.emailBody
       },
       toRecipients: [
         {
