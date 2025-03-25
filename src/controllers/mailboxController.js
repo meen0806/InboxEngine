@@ -16,40 +16,60 @@ exports.getMailboxes = async (req, res) => {
   }
 };
 
+// exports.getMessages = async (req, res) => {
+//   try {
+//     const { account } = req.params;
+//     const { mailbox } = req.params;
+//  // Check if account exists
+//  const accountData = await Account.findById(account);
+//  if (!accountData) {
+//    return res.status(404).json({ error: "❌ Account not found" });
+//  }
+
+//  // Fetch messages only for the specified account
+//  const messages = await Message.find({ account }).populate('attachments').exec();
+
+//  res.status(200).json({ message: "✅ Messages loaded successfully", messages });
+//   } catch (err) {
+//     res.status(500).json({ error: 'Failed to fetch messages', details: err.message });
+//   }
+// };
+
+
 exports.getMessages = async (req, res) => {
   try {
-    const { account } = req.params;
-    const { mailbox } = req.params;
+    const { account, mailbox } = req.params;
 
-    const messages = await Message.find({
-      account_id: account,
-      mailbox_id: mailbox,
-    })
+    const accountData = await Account.findById(account);
 
-    const totalMessages = await Message.countDocuments({
-      account_id: account,
-      mailbox_id: mailbox,
-    });
-    if (!messages.length) {
-      return res.status(404).json({
-        status: "fail",
-        message: "No messages found for the given account and mailbox.",
-        totalMessages
-      });
+    const message = await Message.find();
+
+    if (!accountData) {
+      return res.status(404).json({ error: "❌ Account not found" });
+    }
+    const mailbox2 = await Mailbox.findOne({ _id: mailbox, account: account });
+    if (!mailbox2) {
+      return res.status(404).json({ error: "Mailbox not found" });
     }
 
-    res.status(200).json({
-      status: "success",
-      message: "Messages retrieved successfully.",
-      data: {
+    const messages = await Message.find({ account: account, mailbox: mailbox });
+
+    const totalMessages = await Message.countDocuments({
+      account: account,
+      mailbox: mailbox,
+    });
+
+    res
+      .status(200)
+      .json({
+        message: "✅ Messages loaded successfully",
         messages,
         totalMessages,
-        // totalPages,
-        // currentPage: page,
-      },
-    });
+      });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch messages', details: err.message });
+    res
+      .status(500)
+      .json({ error: "❌ Failed to fetch messages", details: err.message });
   }
 };
 
@@ -113,7 +133,7 @@ exports.deliveryTest = async (req, res) => {
 exports.loadMessages = async (req, res) => {
   try {
     const { account } = req.params;
-    const { criteria } = req.body;
+    // const { criteria } = req.body;
 
     const accountData = await Account.findById(account);
     if (!accountData) {
@@ -121,7 +141,7 @@ exports.loadMessages = async (req, res) => {
     }
 
     // Fetch and save messages
-    const messages = await fetchAndSaveMessages(accountData, criteria);
+    const messages = await fetchAndSaveMessages(accountData);
 
     res.status(200).json({ message: "✅ Messages loaded successfully", messages });
   } catch (err) {

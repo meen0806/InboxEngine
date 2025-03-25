@@ -64,7 +64,6 @@ const fetchAndSaveMessages = async (account, criteria) => {
     throw err;
   }
 };
-
 const fetchGmailMessages = async (account) => {
   try {
     const accessToken = await refreshOAuthToken(account);
@@ -72,19 +71,47 @@ const fetchGmailMessages = async (account) => {
 
     const oauth2Client = new google.auth.OAuth2();
     oauth2Client.setCredentials({ access_token: accessToken });
-
     const gmail = google.gmail({ version: "v1", auth: oauth2Client });
-    const res = await gmail.users.messages.list({ userId: "me", maxResults: 50 });
 
     const messages = [];
 
-    for (const msg of res.data.messages || []) {
-      const msgRes = await gmail.users.messages.get({ userId: "me", id: msg.id });
+    // Step 3: Get all labels (mailboxes) for the account
+    const labelsRes = await gmail.users.labels.list({ userId: "me" });
+    const labels = labelsRes.data.labels;
 
-      const headers = msgRes.data.payload.headers.reduce((acc, header) => {
-        acc[header.name.toLowerCase()] = header.value;
-        return acc;
-      }, {});
+    // Step 4: Loop through each label and fetch messages
+    for (const label of labels) {
+      // Step 4.1: Find or create the mailbox for this label
+      let mailbox = await Mailbox.findOne({ account: account._id, path: label.id });
+
+      // If mailbox doesn't exist, create it
+      if (!mailbox) {
+        mailbox = new Mailbox({
+          account: account._id,
+          path: label.id, // Label ID is used as 'path'
+          name: label.name,
+          totalMessages: 0,
+          unseenMessages: 0,
+        });
+        await mailbox.save();
+      }
+
+      // Fetch up to 500 messages for the current label (you can adjust this number)
+      const res = await gmail.users.messages.list({
+        userId: "me",
+        labelIds: [label.id], // Get messages for the current label
+        maxResults: 10, // Fetch up to 500 messages per request
+      });
+
+      // Step 5: Loop through messages and fetch their details
+      for (const msg of res.data.messages || []) {
+        const msgRes = await gmail.users.messages.get({ userId: "me", id: msg.id });
+
+        // Extract headers from the message
+        const headers = msgRes.data.payload.headers.reduce((acc, header) => {
+          acc[header.name.toLowerCase()] = header.value;
+          return acc;
+        }, {});
 
       const parseEmail = (emailString) => {
         if (!emailString) return [];
@@ -94,17 +121,26 @@ const fetchGmailMessages = async (account) => {
         });
       };
 
-      messages.push({
-        account: account._id,
-        uid: msg.id,
-        subject: headers.subject || "",
-        from: parseEmail(headers.from),
-        to: parseEmail(headers.to),
-        date: new Date(parseInt(msgRes.data.internalDate)),
-        body: msgRes.data.snippet || "",
-        flags: msgRes.data.labelIds || [],
-        headers,
-      });
+        messages.push({
+          account: account._id,
+          mailbox: mailbox._id,
+          uid: msg.id,
+          subject: headers.subject || "",
+          from: parseEmail(headers.from),
+          to: parseEmail(headers.to),
+          date: new Date(parseInt(msgRes.data.internalDate)),
+          body: msgRes.data.snippet || "",
+          flags: msgRes.data.labelIds || [],
+          headers,
+        });
+      }
+    }
+
+    if (messages.length > 0) {
+      await Message.insertMany(messages);
+      console.log(`✅ Successfully saved ${messages.length} messages.`);
+    } else {
+      console.log("No messages found.");
     }
 
     return messages;
