@@ -42,16 +42,6 @@ exports.getMessages = async (req, res) => {
 
     const accountData = await Account.findById(account);
 
-    const message = await Message.find();
-
-    if (!accountData) {
-      return res.status(404).json({ error: "❌ Account not found" });
-    }
-    const mailbox2 = await Mailbox.findOne({ _id: mailbox, account: account });
-    if (!mailbox2) {
-      return res.status(404).json({ error: "Mailbox not found" });
-    }
-
     const messages = await Message.find({ account: account, mailbox: mailbox });
 
     const totalMessages = await Message.countDocuments({
