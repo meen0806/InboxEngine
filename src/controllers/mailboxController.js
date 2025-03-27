@@ -41,6 +41,9 @@ exports.getMessages = async (req, res) => {
     const { account, mailbox } = req.params;
 
     const accountData = await Account.findById(account);
+    if (!accountData) {
+      return res.status(404).json({ error: "❌ Account not found" });
+    }
 
     const messages = await Message.find({ account: account, mailbox: mailbox });
 
@@ -49,13 +52,11 @@ exports.getMessages = async (req, res) => {
       mailbox: mailbox,
     });
 
-    res
-      .status(200)
-      .json({
-        message: "✅ Messages loaded successfully",
-        messages,
-        totalMessages,
-      });
+    res.status(200).json({
+      message: "✅ Messages loaded successfully",
+      messages,
+      totalMessages,
+    });
   } catch (err) {
     res
       .status(500)
@@ -161,7 +162,6 @@ exports.loadMailbox = async (req, res) => {
 
 exports.sendTestEmail = async (req, res) => {
   const { email, toEmail,emailbody } = req.body;
-console.log("body",emailbody)
   if (!email) {
     return res.status(400).json({ message: "Email is required" });
   }
