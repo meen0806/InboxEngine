@@ -13,8 +13,11 @@ const {
   sendTestEmail,
 } = require('../controllers/mailboxController');
 
+
+router.get("/messages/:account/:mailbox", getMessages);
 router.get('/:account/mailboxes', getMailboxes);
-router.get('/:account/:mailbox/messages', getMessages);
+
+// router.get('/:account/messages', getMessages);
 router.get('/:account/message/:message', getMessageById);
 router.delete('/:account/messages/delete', deleteMessages);
 router.post('/:account/search', searchMessages);
