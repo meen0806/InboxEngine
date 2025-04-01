@@ -205,4 +205,4 @@ const fetchIMAPMessages = async (account, criteria) => {
   }
 };
 
-module.exports = { fetchAndSaveMessages };
+module.exports = { fetchAndSaveMessages ,fetchGmailMessages};
