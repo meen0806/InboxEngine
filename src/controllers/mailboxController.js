@@ -16,40 +16,67 @@ exports.getMailboxes = async (req, res) => {
   }
 };
 
+// exports.getMessages = async (req, res) => {
+//   try {
+//     const { account } = req.params;
+//     const { mailbox } = req.params;
+
+//     const messages = await Message.find({
+//       account_id: account,
+//       mailbox_id: mailbox,
+//     })
+
+//     const totalMessages = await Message.countDocuments({
+//       account_id: account,
+//       mailbox_id: mailbox,
+//     });
+//     if (!messages.length) {
+//       return res.status(404).json({
+//         status: "fail",
+//         message: "No messages found for the given account and mailbox.",
+//         totalMessages
+//       });
+//     }
+
+//     res.status(200).json({
+//       status: "success",
+//       message: "Messages retrieved successfully.",
+//       data: {
+//         messages,
+//         totalMessages,
+//         // totalPages,
+//         // currentPage: page,
+//       },
+//     });
+//   } catch (err) {
+//     res.status(500).json({ error: 'Failed to fetch messages', details: err.message });
+//   }
+// };
 exports.getMessages = async (req, res) => {
   try {
-    const { account } = req.params;
-    const { mailbox } = req.params;
+    const { account, mailbox } = req.params;
 
-    const messages = await Message.find({
-      account_id: account,
-      mailbox_id: mailbox,
-    })
-
-    const totalMessages = await Message.countDocuments({
-      account_id: account,
-      mailbox_id: mailbox,
-    });
-    if (!messages.length) {
-      return res.status(404).json({
-        status: "fail",
-        message: "No messages found for the given account and mailbox.",
-        totalMessages
-      });
+    const accountData = await Account.findById(account);
+    if (!accountData) {
+      return res.status(404).json({ error: "Account not found" });
     }
 
+    const messages = await Message.find({ account: account, mailbox: mailbox });
+
+    const totalMessages = await Message.countDocuments({
+      account: account,
+      mailbox: mailbox,
+    });
+
     res.status(200).json({
-      status: "success",
-      message: "Messages retrieved successfully.",
-      data: {
-        messages,
-        totalMessages,
-        // totalPages,
-        // currentPage: page,
-      },
+      message: "Messages loaded successfully",
+      messages,
+      totalMessages,
     });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch messages', details: err.message });
+    res
+      .status(500)
+      .json({ error: ":x: Failed to fetch messages", details: err.message });
   }
 };
 
