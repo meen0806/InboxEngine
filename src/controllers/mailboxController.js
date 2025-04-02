@@ -16,40 +16,67 @@ exports.getMailboxes = async (req, res) => {
   }
 };
 
+// exports.getMessages = async (req, res) => {
+//   try {
+//     const { account } = req.params;
+//     const { mailbox } = req.params;
+
+//     const messages = await Message.find({
+//       account_id: account,
+//       mailbox_id: mailbox,
+//     })
+
+//     const totalMessages = await Message.countDocuments({
+//       account_id: account,
+//       mailbox_id: mailbox,
+//     });
+//     if (!messages.length) {
+//       return res.status(404).json({
+//         status: "fail",
+//         message: "No messages found for the given account and mailbox.",
+//         totalMessages
+//       });
+//     }
+
+//     res.status(200).json({
+//       status: "success",
+//       message: "Messages retrieved successfully.",
+//       data: {
+//         messages,
+//         totalMessages,
+//         // totalPages,
+//         // currentPage: page,
+//       },
+//     });
+//   } catch (err) {
+//     res.status(500).json({ error: 'Failed to fetch messages', details: err.message });
+//   }
+// };
 exports.getMessages = async (req, res) => {
   try {
-    const { account } = req.params;
-    const { mailbox } = req.params;
+    const { account, mailbox } = req.params;
 
-    const messages = await Message.find({
-      account_id: account,
-      mailbox_id: mailbox,
-    })
-
-    const totalMessages = await Message.countDocuments({
-      account_id: account,
-      mailbox_id: mailbox,
-    });
-    if (!messages.length) {
-      return res.status(404).json({
-        status: "fail",
-        message: "No messages found for the given account and mailbox.",
-        totalMessages
-      });
+    const accountData = await Account.findById(account);
+    if (!accountData) {
+      return res.status(404).json({ error: "Account not found" });
     }
 
+    const messages = await Message.find({ account: account, mailbox: mailbox });
+
+    const totalMessages = await Message.countDocuments({
+      account: account,
+      mailbox: mailbox,
+    });
+
     res.status(200).json({
-      status: "success",
-      message: "Messages retrieved successfully.",
-      data: {
-        messages,
-        totalMessages,
-        // totalPages,
-        // currentPage: page,
-      },
+      message: "Messages loaded successfully",
+      messages,
+      totalMessages,
     });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch messages', details: err.message });
+    res
+      .status(500)
+      .json({ error: ":x: Failed to fetch messages", details: err.message });
   }
 };
 
@@ -150,8 +177,7 @@ exports.loadMailbox = async (req, res) => {
 };
 
 exports.sendTestEmail = async (req, res) => {
-  const { email, toEmail,emailbody } = req.body;
-console.log("body",emailbody)
+  const { email, toEmail,emailTemplate } = req.body;
   if (!email) {
     return res.status(400).json({ message: "Email is required" });
   }
@@ -167,11 +193,11 @@ console.log("body",emailbody)
 
   try {
     if (account.type === "gmail") {
-      await sendEmailFromGoogle(accessToken, account.email, toEmail, expiryTime, account,emailbody);
+      await sendEmailFromGoogle(accessToken, account.email, toEmail, expiryTime, account,emailTemplate);
     } else if (account.type === "outlook") {
-      await sendEmailFromMicrosoft(accessToken, account.email, toEmail, expiryTime, account,emailbody);
+      await sendEmailFromMicrosoft(accessToken, account.email, toEmail, expiryTime, account,emailTemplate);
     } else if (account.type === "imap") {
-      await sendEmailWithSMTP(account, toEmail,emailbody);
+      await sendEmailWithSMTP(account, toEmail,emailTemplate);
     } else {
       return res.status(400).json({ message: "Unsupported email provider" });
     }

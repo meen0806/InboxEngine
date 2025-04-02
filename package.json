@@ -19,6 +19,7 @@
     "morgan": "^1.10.0",
     "node-cron": "^3.0.3",
     "nodemailer": "^6.10.0",
+    "p-limit": "^6.2.0",
     "pino": "^9.6.0",
     "swagger-ui-express": "^5.0.1"
   },
