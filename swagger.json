@@ -13,6 +13,15 @@
       "get": {
         "summary": "Get all accounts",
         "tags": ["Accounts"],
+
+        "parameters": [
+          {
+            "name": "orgId",
+            "in": "query",
+            "required": true,
+            "type": "string"
+          }
+        ],
         "responses": {
           "200": {
             "description": "List of accounts",
