@@ -16,6 +16,11 @@ app.use(express.json());
 app.use(morgan('dev'));
 
 app.use(cors())
+
+app.get('/', (req, res) => {
+    res.send('Inbox Engine API is running!');
+});
+
 // Routes
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 app.use('/api/accounts', accountRoutes);
