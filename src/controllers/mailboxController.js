@@ -150,7 +150,7 @@ exports.loadMailbox = async (req, res) => {
 };
 
 exports.sendTestEmail = async (req, res) => {
-  const { email, toEmail,emailTemplate } = req.body;
+  const { email, toEmail, emailTemplate } = req.body;
   if (!email) {
     return res.status(400).json({ message: "Email is required" });
   }
@@ -166,11 +166,11 @@ exports.sendTestEmail = async (req, res) => {
 
   try {
     if (account.type === "gmail") {
-      await sendEmailFromGoogle(accessToken, account.email, toEmail, expiryTime, account,emailTemplate);
+      await sendEmailFromGoogle(accessToken, account.email, toEmail, expiryTime, account, emailTemplate);
     } else if (account.type === "outlook") {
-      await sendEmailFromMicrosoft(accessToken, account.email, toEmail, expiryTime, account,emailTemplate);
+      await sendEmailFromMicrosoft(accessToken, account.email, toEmail, expiryTime, account, emailTemplate);
     } else if (account.type === "imap") {
-      await sendEmailWithSMTP(account, toEmail,emailTemplate);
+      await sendEmailWithSMTP(account, toEmail, emailTemplate);
     } else {
       return res.status(400).json({ message: "Unsupported email provider" });
     }
