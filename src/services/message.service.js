@@ -107,6 +107,7 @@ const fetchGmailMessages = async (account) => {
               name: label.name,
               totalMessages: 0,
               unseenMessages: 0,
+              lastFetchedAt:new Date(0)
             },
           },
           { upsert: true, new: true }
@@ -114,13 +115,24 @@ const fetchGmailMessages = async (account) => {
 
         let nextPageToken = null;
         const allMessages = [];
-
+        const lastFetchedAt = mailbox.lastFetchedAt;
+        let query = "";
+        if (lastFetchedAt) {
+          const year = lastFetchedAt.getFullYear();
+          const month = String(lastFetchedAt.getMonth() + 1).padStart(2, "0");
+          const day = String(lastFetchedAt.getDate()).padStart(2, "0");
+          query = `after:${year}/${month}/${day}`;
+          console.log("query", query);
+        } else {
+          query = "";
+        }
         do {
           const res = await gmail.users.messages.list({
             userId: "me",
             labelIds: [label.id],
             maxResults: 500,
             pageToken: nextPageToken,
+            q: query,
           });
 
           nextPageToken = res.data?.nextPageToken;
@@ -167,12 +179,32 @@ const fetchGmailMessages = async (account) => {
           );
         } while (nextPageToken);
 
-        if (allMessages.length > 0) {
-          await Message.insertMany(allMessages);
-          console.log(
-            `✅ Saved ${allMessages.length} messages for label ${label.name}`
-          );
+        const uids = allMessages.map((m) => m.uid);
+        const existingUidsSet = new Set(
+          await Message.find({
+            uid: { $in: uids },
+            account: account._id,
+            mailbox: mailbox._id,
+          }).distinct("uid")
+        );
+
+        const newMessages = allMessages.filter(
+          (msg) => !existingUidsSet.has(msg.uid)
+        );
+
+        if (newMessages.length > 0) {
+          try {
+            await Message.insertMany(newMessages);
+            console.log(
+              `✅ Inserted ${newMessages.length} new messages for label ${label.name}`
+            );
+          } catch (err) {
+            console.warn("⚠️ Some duplicates may have been skipped");
+          }
+        } else {
+          console.log(`⚠️ No new messages to insert for label ${label.name}`);
         }
+        
       })
     );
 

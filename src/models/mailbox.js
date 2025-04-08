@@ -8,6 +8,7 @@ const mailboxSchema = new mongoose.Schema({
   totalMessages: { type: Number, default: 0 },
   unseenMessages: { type: Number, default: 0 },
   updatedAt: { type: Date, default: Date.now },
+  lastFetchedAt: { type: Date, default: new Date(0) },
 });
 
 module.exports = mongoose.model('Mailbox', mailboxSchema);
