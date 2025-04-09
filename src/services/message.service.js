@@ -50,32 +50,30 @@ const saveMessagesToDatabase = async (accountId, messages) => {
 
 const fetchAndSaveMessages = async (account, criteria) => {
   try {
-    let messages = [];
     const lastFetchTimestamp = account.lastFetchTimestamp || null;
+    const BATCH_SIZE = 50;
+    let allMessages = [];
 
     if (account.type === "gmail") {
-      messages = await fetchGmailMessages(account, lastFetchTimestamp);
+      await fetchAndSaveGmailMessages(account, lastFetchTimestamp, BATCH_SIZE);
     } else if (account.type === "outlook") {
-      messages = await fetchOutlookMessages(account, lastFetchTimestamp);
+      await fetchAndSaveOutlookMessages(account, lastFetchTimestamp, BATCH_SIZE);
     } else {
-      messages = await fetchIMAPMessages(account, criteria, lastFetchTimestamp);
+      await fetchAndSaveIMAPMessages(account, criteria, lastFetchTimestamp, BATCH_SIZE);
     }
 
-    await saveMessagesToDatabase(account._id, messages);
-
-    //Update Time
     const currentTime = new Date();
     await Account.findByIdAndUpdate(account._id, {
       lastFetchTimestamp: currentTime,
     });
 
-    return messages;
+    return allMessages;
   } catch (err) {
     throw err;
   }
 };
 
-const fetchGmailMessages = async (account, lastFetchTimestamp) => {
+const fetchAndSaveGmailMessages = async (account, lastFetchTimestamp, batchSize) => {
   try {
     const accessToken = await refreshOAuthToken(account);
     if (!accessToken)
@@ -86,142 +84,125 @@ const fetchGmailMessages = async (account, lastFetchTimestamp) => {
 
     const gmail = google.gmail({ version: "v1", auth: oauth2Client });
 
-    // batch operations for 50 results
-    const listParams = { userId: "me", maxResults: 50 };
+    const listParams = { userId: "me", maxResults: batchSize };
 
     if (lastFetchTimestamp) {
       const timestampSeconds = Math.floor(lastFetchTimestamp.getTime() / 1000);
       listParams.q = `after:${timestampSeconds}`;
     }
 
-    let allMessageIds = [];
     let nextPageToken = null;
 
-    // batch operations for 50 results - it is a loop
     do {
       if (nextPageToken) {
         listParams.pageToken = nextPageToken;
       }
-
       const res = await gmail.users.messages.list(listParams);
       const messageIds = res.data.messages || [];
-      allMessageIds = [...allMessageIds, ...messageIds];
+      if (messageIds.length === 0) break;
+      const messages = [];
+      for (const msg of messageIds) {
+        const msgRes = await gmail.users.messages.get({
+          userId: "me",
+          id: msg.id,
+        });
 
+        const headers = msgRes.data.payload.headers.reduce((acc, header) => {
+          acc[header.name.toLowerCase()] = header.value;
+          return acc;
+        }, {});
+
+        const parseEmail = (emailString) => {
+          if (!emailString) return [];
+          return emailString.split(",").map((email) => {
+            const match = email.match(/(.*)<(.*)>/);
+            return match
+              ? { name: match[1].trim(), address: match[2].trim() }
+              : { address: email.trim() };
+          });
+        };
+
+        messages.push({
+          account: account._id,
+          uid: msg.id,
+          subject: headers.subject || "",
+          from: parseEmail(headers.from),
+          to: parseEmail(headers.to),
+          date: new Date(parseInt(msgRes.data.internalDate)),
+          body: msgRes.data.snippet || "",
+          flags: msgRes.data.labelIds || [],
+          headers,
+        });
+      }
+      
+      await saveMessagesToDatabase(account._id, messages);
       nextPageToken = res.data.nextPageToken;
     } while (nextPageToken);
 
-    console.log(`📥 Total message IDs fetched: ${allMessageIds.length}`);
-
-    const messages = [];
-
-    for (const msg of allMessageIds) {
-      const msgRes = await gmail.users.messages.get({
-        userId: "me",
-        id: msg.id,
-      });
-
-      const headers = msgRes.data.payload.headers.reduce((acc, header) => {
-        acc[header.name.toLowerCase()] = header.value;
-        return acc;
-      }, {});
-
-      const parseEmail = (emailString) => {
-        if (!emailString) return [];
-        return emailString.split(",").map((email) => {
-          const match = email.match(/(.*)<(.*)>/);
-          return match
-            ? { name: match[1].trim(), address: match[2].trim() }
-            : { address: email.trim() };
-        });
-      };
-
-      messages.push({
-        account: account._id,
-        uid: msg.id,
-        subject: headers.subject || "",
-        from: parseEmail(headers.from),
-        to: parseEmail(headers.to),
-        date: new Date(parseInt(msgRes.data.internalDate)),
-        body: msgRes.data.snippet || "",
-        flags: msgRes.data.labelIds || [],
-        headers,
-      });
-    }
-
-    return messages;
   } catch (error) {
     console.error("❌ Error fetching Gmail messages:", error.message);
     throw error;
   }
 };
 
-const fetchOutlookMessages = async (account, lastFetchTimestamp) => {
+const fetchAndSaveOutlookMessages = async (account, lastFetchTimestamp, batchSize) => {
   try {
     const accessToken = await refreshOAuthToken(account);
     if (!accessToken)
       throw new Error("❌ Failed to refresh OAuth token for Outlook");
 
-    const params = { $top: 50 };
+    const params = { $top: batchSize };
 
     if (lastFetchTimestamp) {
       const formattedTime = lastFetchTimestamp.toISOString();
       params.$filter = `receivedDateTime gt ${formattedTime}`;
-    } else {
     }
 
-    let allMessages = [];
     let nextLink = `https://graph.microsoft.com/v1.0/me/messages`;
 
-    // Fetch all pages of messages
     while (nextLink) {
       const res = await axios.get(nextLink, {
         headers: { Authorization: `Bearer ${accessToken}` },
         params:
           nextLink === `https://graph.microsoft.com/v1.0/me/messages`
             ? params
-            : {}, // Only use params on first request
+            : {},
       });
 
       const messages = res.data.value || [];
-      allMessages = [...allMessages, ...messages];
-      // Get the @odata.nextLink if it exists
+      if (messages.length === 0) break;
+      const formattedMessages = messages.map((msg) => ({
+        account: account._id,
+        uid: msg.id,
+        subject: msg.subject || "",
+        from: msg.from?.emailAddress?.address
+          ? {
+              name: msg.from.emailAddress.name,
+              address: msg.from.emailAddress.address,
+            }
+          : "",
+        to:
+          msg.toRecipients
+            ?.map((r) =>
+              r.emailAddress
+                ? { name: r.emailAddress.name, address: r.emailAddress.address }
+                : null
+            )
+            .filter(Boolean) || [],
+        date: new Date(msg.receivedDateTime),
+        body: msg.body?.content || "",
+      }));
+      
+      await saveMessagesToDatabase(account._id, formattedMessages);
       nextLink = res.data["@odata.nextLink"] || null;
-
-      if (nextLink) {
-        console.log(
-          `📥 Fetched ${messages.length} messages, loading next page...`
-        );
-      }
     }
-
-    return allMessages.map((msg) => ({
-      account: account._id,
-      uid: msg.id,
-      subject: msg.subject || "",
-      from: msg.from?.emailAddress?.address
-        ? {
-            name: msg.from.emailAddress.name,
-            address: msg.from.emailAddress.address,
-          }
-        : "",
-      to:
-        msg.toRecipients
-          ?.map((r) =>
-            r.emailAddress
-              ? { name: r.emailAddress.name, address: r.emailAddress.address }
-              : null
-          )
-          .filter(Boolean) || [],
-      date: new Date(msg.receivedDateTime),
-      body: msg.body?.content || "",
-    }));
   } catch (error) {
     console.error("❌ Error fetching Outlook messages:", error.message);
     throw error;
   }
 };
 
-const fetchIMAPMessages = async (account, criteria, lastFetchTimestamp) => {
+const fetchAndSaveIMAPMessages = async (account, criteria, lastFetchTimestamp, batchSize) => {
   try {
     const client = new ImapFlow({
       host: account.imap.host,
@@ -238,7 +219,6 @@ const fetchIMAPMessages = async (account, criteria, lastFetchTimestamp) => {
     console.log("✅ IMAP Connected successfully");
 
     const mailboxes = await Mailbox.find({ account: account._id });
-    let messages = [];
 
     for (const mailbox of mailboxes) {
       if (mailbox.totalMessages === 0) {
@@ -252,57 +232,54 @@ const fetchIMAPMessages = async (account, criteria, lastFetchTimestamp) => {
         console.log(`📂 Fetching emails from: ${mailbox.name}`);
 
         let searchCriteria;
+        let messagesToFetch = [];
 
         if (lastFetchTimestamp) {
-          const formattedDate = lastFetchTimestamp.toISOString();
-
-          // Search for newer messages only
-          const searchResults = await client.search({
+          messagesToFetch = await client.search({
             since: lastFetchTimestamp,
           });
-
-          if (searchResults.length === 0) {
-            continue;
-          }
-
-          searchCriteria = { uid: searchResults };
         } else {
           const status = await client.status(mailbox.path, ["messages"]);
           const totalMessages = status.messages;
-
-          // If (too many messages), limit is 100
-          if (totalMessages > 100) {
-            searchCriteria = totalMessages - 99 + ":" + totalMessages;
-          } else {
-            searchCriteria = "1:*";
-          }
+          messagesToFetch = await client.search({ all: true });
         }
 
-        for await (const msg of client.fetch(searchCriteria, {
-          uid: true,
-          envelope: true,
-          source: true,
-        })) {
-          if (!msg.source) {
-            console.warn(`⚠️ No source found for UID: ${msg.uid}`);
-            continue;
+        for (let i = 0; i < messagesToFetch.length; i += batchSize) {
+          const batchUIDs = messagesToFetch.slice(i, i + batchSize);
+          
+          if (batchUIDs.length === 0) continue;
+          
+          const batchMessages = [];
+          
+          for await (const msg of client.fetch({ uid: batchUIDs }, {
+            uid: true,
+            envelope: true,
+            source: true,
+          })) {
+            if (!msg.source) {
+              console.warn(`⚠️ No source found for UID: ${msg.uid}`);
+              continue;
+            }
+
+            console.log(`📩 Found email: ${msg.envelope.subject}`);
+
+            const parsedMessage = await simpleParser(msg.source);
+            batchMessages.push({
+              account: account._id,
+              mailbox: mailbox._id,
+              uid: msg.uid,
+              subject: parsedMessage.subject || "",
+              from: parsedMessage.from?.value || [],
+              to: parsedMessage.to?.value || [],
+              date: parsedMessage.date || new Date(),
+              body: parsedMessage.text || parsedMessage.html || "",
+              flags: msg.flags || [],
+            });
           }
-
-          console.log(`📩 Found email: ${msg.envelope.subject}`);
-
-          const parsedMessage = await simpleParser(msg.source);
-          messages.push({
-            account: account._id,
-            mailbox: mailbox._id,
-            uid: msg.uid,
-            subject: parsedMessage.subject || "",
-            from: parsedMessage.from?.value || [],
-            to: parsedMessage.to?.value || [],
-            date: parsedMessage.date || new Date(),
-            body: parsedMessage.text || parsedMessage.html || "",
-            flags: msg.flags || [],
-          });
+          
+          await saveMessagesToDatabase(account._id, batchMessages);
         }
+        
       } catch (err) {
         console.error(
           `❌ Error processing mailbox ${mailbox.path}: ${err.message}`
@@ -313,7 +290,6 @@ const fetchIMAPMessages = async (account, criteria, lastFetchTimestamp) => {
     }
 
     await client.logout();
-    return messages;
   } catch (err) {
     console.error("❌ Error fetching IMAP messages:", err.message);
     throw err;
