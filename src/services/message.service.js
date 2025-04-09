@@ -63,7 +63,7 @@ const fetchAndSaveMessages = async (account, criteria) => {
 
     await saveMessagesToDatabase(account._id, messages);
 
-    
+    //Update Time
     const currentTime = new Date();
     await Account.findByIdAndUpdate(account._id, {
       lastFetchTimestamp: currentTime,
@@ -86,7 +86,7 @@ const fetchGmailMessages = async (account, lastFetchTimestamp) => {
 
     const gmail = google.gmail({ version: "v1", auth: oauth2Client });
 
-    
+    // batch operations for 50 results
     const listParams = { userId: "me", maxResults: 50 };
 
     if (lastFetchTimestamp) {
@@ -97,7 +97,7 @@ const fetchGmailMessages = async (account, lastFetchTimestamp) => {
     let allMessageIds = [];
     let nextPageToken = null;
 
-    
+    // batch operations for 50 results - it is a loop
     do {
       if (nextPageToken) {
         listParams.pageToken = nextPageToken;
@@ -170,21 +170,21 @@ const fetchOutlookMessages = async (account, lastFetchTimestamp) => {
     }
 
     let allMessages = [];
-    let nextLink = `https:
+    let nextLink = `https://graph.microsoft.com/v1.0/me/messages`;
 
-    
+    // Fetch all pages of messages
     while (nextLink) {
       const res = await axios.get(nextLink, {
         headers: { Authorization: `Bearer ${accessToken}` },
         params:
-          nextLink === `https:
+          nextLink === `https://graph.microsoft.com/v1.0/me/messages`
             ? params
-            : {}, 
+            : {}, // Only use params on first request
       });
 
       const messages = res.data.value || [];
       allMessages = [...allMessages, ...messages];
-      
+      // Get the @odata.nextLink if it exists
       nextLink = res.data["@odata.nextLink"] || null;
 
       if (nextLink) {
@@ -256,7 +256,7 @@ const fetchIMAPMessages = async (account, criteria, lastFetchTimestamp) => {
         if (lastFetchTimestamp) {
           const formattedDate = lastFetchTimestamp.toISOString();
 
-          
+          // Search for newer messages only
           const searchResults = await client.search({
             since: lastFetchTimestamp,
           });
@@ -270,7 +270,7 @@ const fetchIMAPMessages = async (account, criteria, lastFetchTimestamp) => {
           const status = await client.status(mailbox.path, ["messages"]);
           const totalMessages = status.messages;
 
-          
+          // If (too many messages), limit is 100
           if (totalMessages > 100) {
             searchCriteria = totalMessages - 99 + ":" + totalMessages;
           } else {
