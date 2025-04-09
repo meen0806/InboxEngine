@@ -17,6 +17,7 @@ const accountSchema = new mongoose.Schema({
   time_gap: { type: Number },
   logs: { type: Boolean, default: false },
   notifyFrom: { type: Date, default: Date.now },
+  lastFetchTimestamp: { type: Date, default: null },
   proxy: { type: String },
   smtpEhloName: { type: String },
   imapIndexer: { type: String, enum: ['full', 'fast'] },
