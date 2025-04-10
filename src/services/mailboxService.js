@@ -273,7 +273,7 @@ const fetchGmailMailboxes = async (accessToken) => {
           path: label.id,
           totalMessages: labelData.messagesTotal || 0,
           unseenMessages: labelData.messagesUnread || 0,
-          updatedAt: new Date(),
+          lastFetchedAt: new Date(),
         };
       })
     );

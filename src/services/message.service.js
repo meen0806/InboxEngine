@@ -107,7 +107,7 @@ const fetchGmailMessages = async (account) => {
               name: label.name,
               totalMessages: 0,
               unseenMessages: 0,
-              lastFetchedAt:new Date(0)
+              lastFetchedAt:new Date()
             },
           },
           { upsert: true, new: true }
@@ -115,29 +115,25 @@ const fetchGmailMessages = async (account) => {
 
         let nextPageToken = null;
         const allMessages = [];
-        const lastFetchedAt = mailbox.lastFetchedAt;
-        let query = "";
-        if (lastFetchedAt) {
-          const year = lastFetchedAt.getFullYear();
-          const month = String(lastFetchedAt.getMonth() + 1).padStart(2, "0");
-          const day = String(lastFetchedAt.getDate()).padStart(2, "0");
-          query = `after:${year}/${month}/${day}`;
-          console.log("query", query);
-        } else {
-          query = "";
-        }
+        const lastFetchedAt = new Date(mailbox.lastFetchedAt);
+        lastFetchedAt.setDate(lastFetchedAt.getDate() - 1); // back 1 day
+        const afterTimestampInSeconds = Math.floor(lastFetchedAt.getTime() / 1000);
+        const query = `after:${afterTimestampInSeconds}`;
+        
+        
         do {
           const res = await gmail.users.messages.list({
             userId: "me",
             labelIds: [label.id],
             maxResults: 500,
             pageToken: nextPageToken,
-            q: query,
+        //  q:query
           });
 
           nextPageToken = res.data?.nextPageToken;
 
-          const messages = res?.data?.messages || [];
+          const messages = Array.isArray(res?.data?.messages) ? res.data.messages : [];
+
           if (messages.length === 0) {
             console.log(`No messages found for label: ${label.name}`);
             break;
@@ -172,14 +168,14 @@ const fetchGmailMessages = async (account) => {
             )
           );
 
-          allMessages.push(
+          allMessages?.push(
             ...messageDetails
               .filter((res) => res.status === "fulfilled")
               .map((res) => res.value)
           );
         } while (nextPageToken);
 
-        const uids = allMessages.map((m) => m.uid);
+        const uids = Array.isArray(allMessages) ? allMessages.map((m) => m.uid) : [];
         const existingUidsSet = new Set(
           await Message.find({
             uid: { $in: uids },
@@ -188,16 +184,21 @@ const fetchGmailMessages = async (account) => {
           }).distinct("uid")
         );
 
-        const newMessages = allMessages.filter(
-          (msg) => !existingUidsSet.has(msg.uid)
-        );
+        const newMessages = Array.isArray(allMessages)
+        ? allMessages.filter((msg) => !existingUidsSet.has(msg.uid))
+        : [];
 
-        if (newMessages.length > 0) {
+        if (Array.isArray(newMessages) && newMessages.length > 0)  {
           try {
             await Message.insertMany(newMessages);
             console.log(
               `✅ Inserted ${newMessages.length} new messages for label ${label.name}`
             );
+            await Mailbox.updateOne(
+              { _id: mailbox._id },
+              { $set: { lastFetchedAt: new Date() } }
+            );
+            
           } catch (err) {
             console.warn("⚠️ Some duplicates may have been skipped");
           }
