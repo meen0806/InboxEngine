@@ -126,7 +126,7 @@ const fetchAndSaveMessages = async (account, criteria) => {
   }
 };
 
-const fetchAndSaveMailboxes = async (accountDIetails) => {
+const fetchAndSaveMailboxes = async (accountDetails) => {
   switch (accountDetails.type) {
     case "gmail":
       return await fetchAndSaveGmailMailboxes(accountDetails);
