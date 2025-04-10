@@ -26,7 +26,7 @@ exports.getMessages = async (req, res) => {
   try {
     const { account, mailbox } = req.params;
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 50;
+    const limit = parseInt(req.query.limit) || 10;
 
     if (page <= 0 || limit <= 0) {
       return res.status(400).json({
