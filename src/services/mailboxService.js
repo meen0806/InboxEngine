@@ -6,7 +6,7 @@ const { google } = require("googleapis");
 
 async function openMailboxSafely(client, mailbox) {
   const mailboxes = await client.list();
-  const mailboxExists = mailboxes.some(m => m.path === mailbox);
+  const mailboxExists = mailboxes.some((m) => m.path === mailbox);
 
   if (!mailboxExists) {
     console.warn(`⚠️ Skipping non-existent mailbox: ${mailbox}`);
@@ -24,7 +24,8 @@ const refreshOAuthToken = async (account) => {
     process.env.GOOGLE_REDIRECT_URI
   );
 
-  const refreshToken = account.oauth2.tokens.refresh_token || process.env.GOOGLE_REFRESH_TOKEN;
+  const refreshToken =
+    account.oauth2.tokens.refresh_token || process.env.GOOGLE_REFRESH_TOKEN;
   if (!refreshToken) {
     throw new Error("❌ No refresh token available!");
   }
@@ -43,19 +44,20 @@ const fetchAndSaveMessages = async (account, criteria) => {
     }
 
     const { imap, type } = account;
-    const imapConfig = type === "gmail" || type === "outlook"
-      ? {
-        host: type === "gmail" ? "imap.gmail.com" : "outlook.office365.com",
-        port: 993,
-        secure: true,
-        auth: account.imap.auth,
-      }
-      : {
-        host: imap.host,
-        port: imap.port,
-        secure: imap.secure,
-        auth: imap.auth,
-      };
+    const imapConfig =
+      type === "gmail" || type === "outlook"
+        ? {
+            host: type === "gmail" ? "imap.gmail.com" : "outlook.office365.com",
+            port: 993,
+            secure: true,
+            auth: account.imap.auth,
+          }
+        : {
+            host: imap.host,
+            port: imap.port,
+            secure: imap.secure,
+            auth: imap.auth,
+          };
 
     const client = new ImapFlow(imapConfig);
     await client.connect();
@@ -74,9 +76,12 @@ const fetchAndSaveMessages = async (account, criteria) => {
         lock = await client.getMailboxLock(mailbox.path);
         console.log(`📂 Fetching emails from: ${mailbox.name}`);
 
-        // Fetch only 10 emails
         let count = 0;
-        for await (const msg of client.fetch("1:10", { uid: true, envelope: true, source: true })) {
+        for await (const msg of client.fetch("1:10", {
+          uid: true,
+          envelope: true,
+          source: true,
+        })) {
           if (!msg.source) {
             console.warn(`⚠️ No source found for UID: ${msg.uid}`);
             continue;
@@ -101,10 +106,12 @@ const fetchAndSaveMessages = async (account, criteria) => {
           console.log(`✅ Saved message: ${newMessage.uid}`);
 
           count++;
-          if (count >= 10) break; // Stop fetching after 10 emails
+          if (count >= 10) break;
         }
       } catch (err) {
-        console.error(`❌ Error processing mailbox ${mailbox.path}: ${err.message}`);
+        console.error(
+          `❌ Error processing mailbox ${mailbox.path}: ${err.message}`
+        );
       } finally {
         if (lock) lock.release();
       }
@@ -113,11 +120,13 @@ const fetchAndSaveMessages = async (account, criteria) => {
     await client.logout();
     console.log(`🎉 Finished fetching messages for account ${account.account}`);
   } catch (err) {
-    console.error(`❌ Error fetching messages for account ${account.account}: ${err.message}`);
+    console.error(
+      `❌ Error fetching messages for account ${account.account}: ${err.message}`
+    );
   }
 };
 
-const   fetchAndSaveMailboxes = async (accountDetails) => {
+const fetchAndSaveMailboxes = async (accountDIetails) => {
   switch (accountDetails.type) {
     case "gmail":
       return await fetchAndSaveGmailMailboxes(accountDetails);
@@ -131,7 +140,10 @@ const   fetchAndSaveMailboxes = async (accountDetails) => {
 const saveMailboxes = async (accountId, mailboxes) => {
   try {
     for (const mailbox of mailboxes) {
-      const existingMailbox = await Mailbox.findOne({ account: accountId, path: mailbox.path });
+      const existingMailbox = await Mailbox.findOne({
+        account: accountId,
+        path: mailbox.path,
+      });
 
       if (existingMailbox) {
         if (
@@ -151,7 +163,6 @@ const saveMailboxes = async (accountId, mailboxes) => {
           console.log(`🔄 Updated mailbox: ${mailbox.name}`);
         }
       } else {
-        // Ensure `account` field is included before saving
         await Mailbox.create({ ...mailbox, account: accountId });
         console.log(`✅ Saved new mailbox: ${mailbox.name}`);
       }
@@ -166,7 +177,8 @@ const saveMailboxes = async (accountId, mailboxes) => {
 const fetchAndSaveGmailMailboxes = async (accountDetails) => {
   try {
     const accessToken = await refreshOAuthToken(accountDetails);
-    if (!accessToken) throw new Error("❌ Failed to refresh OAuth token for Gmail.");
+    if (!accessToken)
+      throw new Error("❌ Failed to refresh OAuth token for Gmail.");
 
     const mailboxes = await fetchGmailMailboxes(accessToken);
 
@@ -180,7 +192,8 @@ const fetchAndSaveGmailMailboxes = async (accountDetails) => {
 const fetchAndSaveOutlookMailboxes = async (accountDetails) => {
   try {
     const accessToken = await refreshOAuthToken(accountDetails);
-    if (!accessToken) throw new Error("❌ Failed to refresh OAuth token for Outlook.");
+    if (!accessToken)
+      throw new Error("❌ Failed to refresh OAuth token for Outlook.");
 
     const response = await fetchOutlookMailboxes(accessToken);
     const mailboxes = response.labels || [];
@@ -218,7 +231,10 @@ const fetchAndSaveIMAPMailboxes = async (accountDetails) => {
 
       try {
         await client.mailboxOpen(mailbox.path);
-        const status = await client.status(mailbox.path, ["messages", "unseen"]);
+        const status = await client.status(mailbox.path, [
+          "messages",
+          "unseen",
+        ]);
 
         mailboxDocuments.push({
           account: accountDetails._id,
@@ -229,7 +245,9 @@ const fetchAndSaveIMAPMailboxes = async (accountDetails) => {
           updatedAt: new Date(),
         });
       } catch (err) {
-        console.error(`❌ Error fetching status for ${mailbox.name}: ${err.message}`);
+        console.error(
+          `❌ Error fetching status for ${mailbox.name}: ${err.message}`
+        );
       }
     }
 
@@ -247,10 +265,16 @@ const fetchAndSaveIMAPMailboxes = async (accountDetails) => {
 
 const fetchGmailMailboxes = async (accessToken) => {
   try {
-    const response = await fetch("https://www.googleapis.com/gmail/v1/users/me/labels", {
-      method: "GET",
-      headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
-    });
+    const response = await fetch(
+      "https://www.googleapis.com/gmail/v1/users/me/labels",
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/json",
+        },
+      }
+    );
 
     if (!response.ok) {
       throw new Error(`❌ Gmail API Error: ${response.statusText}`);
@@ -259,7 +283,6 @@ const fetchGmailMailboxes = async (accessToken) => {
     const data = await response.json();
     const labels = data.labels || [];
 
-    // Fetch total and unread message counts for each label
     const mailboxData = await Promise.all(
       labels.map(async (label) => {
         const labelResponse = await fetch(
@@ -284,6 +307,5 @@ const fetchGmailMailboxes = async (accessToken) => {
     throw error;
   }
 };
-
 
 module.exports = { fetchAndSaveMailboxes, fetchAndSaveMessages };

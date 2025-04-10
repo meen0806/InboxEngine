@@ -1,10 +1,14 @@
-const Account = require('../models/account');
-const Mailbox = require('../models/mailbox');
-const Message = require('../models/message');
-const Attachment = require('../models/attachment');
-const { fetchAndSaveMessages } = require('../services/message.service');
-const { fetchAndSaveMailboxes } = require('../services/mailboxService');
-const { sendEmailFromGoogle, sendEmailFromMicrosoft, sendEmailWithSMTP } = require('../util/sendEmail');
+const Account = require("../models/account");
+const Mailbox = require("../models/mailbox");
+const Message = require("../models/message");
+const Attachment = require("../models/attachment");
+const { fetchAndSaveMessages } = require("../services/message.service");
+const { fetchAndSaveMailboxes } = require("../services/mailboxService");
+const {
+  sendEmailFromGoogle,
+  sendEmailFromMicrosoft,
+  sendEmailWithSMTP,
+} = require("../util/sendEmail");
 
 exports.getMailboxes = async (req, res) => {
   try {
@@ -12,29 +16,50 @@ exports.getMailboxes = async (req, res) => {
     const mailboxes = await Mailbox.find({ account });
     res.status(200).json(mailboxes);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch mailboxes', details: err.message });
+    res
+      .status(500)
+      .json({ error: "Failed to fetch mailboxes", details: err.message });
   }
 };
 
 exports.getMessages = async (req, res) => {
   try {
-    const { account } = req.params;
-    const { mailbox } = req.params;
+    const { account, mailbox } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
 
-    const messages = await Message.find({
-      account_id: account,
-      mailbox_id: mailbox,
-    })
+    if (page <= 0 || limit <= 0) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Page and limit must be positive numbers",
+      });
+    }
+
+    const skip = (page - 1) * limit;
+
+    const query = Message.find({
+      account: account,
+      mailbox: mailbox,
+    });
+
+    const messages = await query
+      .sort({ date: -1 })
+      .skip(skip)
+      .limit(limit)
+      .exec();
 
     const totalMessages = await Message.countDocuments({
-      account_id: account,
-      mailbox_id: mailbox,
+      account: account,
+      mailbox: mailbox,
     });
-    if (!messages.length) {
+
+    const totalPages = Math.ceil(totalMessages / limit);
+
+    if (messages.length === 0 && totalMessages === 0) {
       return res.status(404).json({
         status: "fail",
         message: "No messages found for the given account and mailbox.",
-        totalMessages
+        totalMessages,
       });
     }
 
@@ -44,45 +69,54 @@ exports.getMessages = async (req, res) => {
       data: {
         messages,
         totalMessages,
-        // totalPages,
-        // currentPage: page,
+        totalPages,
+        currentPage: page,
+        hasMore: page < totalPages,
       },
     });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch messages', details: err.message });
+    res.status(500).json({
+      status: "error",
+      message: "Failed to fetch messages",
+      details: err.message,
+    });
   }
 };
 
 exports.getMessageById = async (req, res) => {
   try {
     const { message } = req.params;
-    const msg = await Message.findById(message).populate('attachments');
-    if (!msg) return res.status(404).json({ error: 'Message not found' });
+    const msg = await Message.findById(message).populate("attachments");
+    if (!msg) return res.status(404).json({ error: "Message not found" });
     res.status(200).json(msg);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch message', details: err.message });
+    res
+      .status(500)
+      .json({ error: "Failed to fetch message", details: err.message });
   }
 };
 
 exports.deleteMessages = async (req, res) => {
   try {
     const { account } = req.params;
-    const { uids } = req.body; // List of message UIDs
+    const { uids } = req.body;
     await Message.deleteMany({ account, uid: { $in: uids } });
-    res.status(200).json({ message: 'Messages deleted successfully' });
+    res.status(200).json({ message: "Messages deleted successfully" });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to delete messages', details: err.message });
+    res
+      .status(500)
+      .json({ error: "Failed to delete messages", details: err.message });
   }
 };
 
 exports.searchMessages = async (req, res) => {
   try {
     const { account } = req.params;
-    const { query } = req.body; // Search query
+    const { query } = req.body;
     const results = await Message.find({ account, $text: { $search: query } });
     res.status(200).json(results);
   } catch (err) {
-    res.status(500).json({ error: 'Search failed', details: err.message });
+    res.status(500).json({ error: "Search failed", details: err.message });
   }
 };
 
@@ -90,13 +124,15 @@ exports.getAttachment = async (req, res) => {
   try {
     const { attachment } = req.params;
     const attach = await Attachment.findById(attachment);
-    if (!attach) return res.status(404).json({ error: 'Attachment not found' });
+    if (!attach) return res.status(404).json({ error: "Attachment not found" });
 
-    res.set('Content-Type', attach.contentType);
-    res.set('Content-Disposition', `attachment; filename="${attach.filename}"`);
+    res.set("Content-Type", attach.contentType);
+    res.set("Content-Disposition", `attachment; filename="${attach.filename}"`);
     res.send(attach.content);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch attachment', details: err.message });
+    res
+      .status(500)
+      .json({ error: "Failed to fetch attachment", details: err.message });
   }
 };
 
@@ -106,7 +142,9 @@ exports.deliveryTest = async (req, res) => {
     const result = await runDeliveryTest(deliveryTest);
     res.status(200).json(result);
   } catch (err) {
-    res.status(500).json({ error: 'Delivery test failed', details: err.message });
+    res
+      .status(500)
+      .json({ error: "Delivery test failed", details: err.message });
   }
 };
 
@@ -120,13 +158,16 @@ exports.loadMessages = async (req, res) => {
       return res.status(404).json({ error: "❌ Account not found" });
     }
 
-    // Fetch and save messages
     const messages = await fetchAndSaveMessages(accountData, criteria);
 
-    res.status(200).json({ message: "✅ Messages loaded successfully", messages });
+    res
+      .status(200)
+      .json({ message: "✅ Messages loaded successfully", messages });
   } catch (err) {
     console.error("❌ Error loading messages:", err.message);
-    res.status(500).json({ error: "❌ Failed to load messages", details: err.message });
+    res
+      .status(500)
+      .json({ error: "❌ Failed to load messages", details: err.message });
   }
 };
 
@@ -137,7 +178,7 @@ exports.loadMailbox = async (req, res) => {
     // Fetch account details from database
     const accountDetails = await Account.findById(account);
     if (!accountDetails) {
-      return res.status(404).json({ error: 'Account not found' });
+      return res.status(404).json({ error: "Account not found" });
     }
 
     // Fetch and save mailboxes for the account
@@ -145,7 +186,10 @@ exports.loadMailbox = async (req, res) => {
 
     res.status(201).json({ success: true, mailboxes });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch and save mailboxes', details: error.message });
+    res.status(500).json({
+      error: "Failed to fetch and save mailboxes",
+      details: error.message,
+    });
   }
 };
 
@@ -166,16 +210,32 @@ exports.sendTestEmail = async (req, res) => {
 
   try {
     if (account.type === "gmail") {
-      await sendEmailFromGoogle(accessToken, account.email, toEmail, expiryTime, account, emailTemplate);
+      await sendEmailFromGoogle(
+        accessToken,
+        account.email,
+        toEmail,
+        expiryTime,
+        account,
+        emailTemplate
+      );
     } else if (account.type === "outlook") {
-      await sendEmailFromMicrosoft(accessToken, account.email, toEmail, expiryTime, account, emailTemplate);
+      await sendEmailFromMicrosoft(
+        accessToken,
+        account.email,
+        toEmail,
+        expiryTime,
+        account,
+        emailTemplate
+      );
     } else if (account.type === "imap") {
       await sendEmailWithSMTP(account, toEmail, emailTemplate);
     } else {
       return res.status(400).json({ message: "Unsupported email provider" });
     }
 
-    return res.status(200).json({ code: 200, message: "Email sent successfully" });
+    return res
+      .status(200)
+      .json({ code: 200, message: "Email sent successfully" });
   } catch (error) {
     return res.status(500).json({ code: 500, message: error.message });
   }
