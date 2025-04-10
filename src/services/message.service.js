@@ -57,9 +57,18 @@ const fetchAndSaveMessages = async (account, criteria) => {
     if (account.type === "gmail") {
       await fetchAndSaveGmailMessages(account, lastFetchTimestamp, BATCH_SIZE);
     } else if (account.type === "outlook") {
-      await fetchAndSaveOutlookMessages(account, lastFetchTimestamp, BATCH_SIZE);
+      await fetchAndSaveOutlookMessages(
+        account,
+        lastFetchTimestamp,
+        BATCH_SIZE
+      );
     } else {
-      await fetchAndSaveIMAPMessages(account, criteria, lastFetchTimestamp, BATCH_SIZE);
+      await fetchAndSaveIMAPMessages(
+        account,
+        criteria,
+        lastFetchTimestamp,
+        BATCH_SIZE
+      );
     }
 
     const currentTime = new Date();
@@ -73,11 +82,37 @@ const fetchAndSaveMessages = async (account, criteria) => {
   }
 };
 
-const fetchAndSaveGmailMessages = async (account, lastFetchTimestamp, batchSize) => {
+const fetchAndSaveGmailMessages = async (
+  account,
+  lastFetchTimestamp,
+  batchSize
+) => {
   try {
     const accessToken = await refreshOAuthToken(account);
     if (!accessToken)
       throw new Error("Failed to refresh OAuth token for Gmail");
+
+    // Get all mailboxes for this account
+    const accountMailboxes = await Mailbox.find({ account: account._id });
+
+    // Ensure at least INBOX exists for fallback
+    let inboxMailbox = accountMailboxes.find((mb) => mb.name === "INBOX");
+    if (!inboxMailbox && accountMailboxes.length > 0) {
+      // If no INBOX but other mailboxes exist, use the first one as fallback
+      inboxMailbox = accountMailboxes[0];
+    } else if (!inboxMailbox) {
+      // If no mailboxes at all, create INBOX as last resort
+      inboxMailbox = await Mailbox.create({
+        account: account._id,
+        name: "INBOX",
+        path: "INBOX",
+        totalMessages: 0,
+        unseenMessages: 0,
+      });
+      console.log(
+        "Created INBOX mailbox for Gmail account as no mailboxes existed"
+      );
+    }
 
     const oauth2Client = new google.auth.OAuth2();
     oauth2Client.setCredentials({ access_token: accessToken });
@@ -122,8 +157,19 @@ const fetchAndSaveGmailMessages = async (account, lastFetchTimestamp, batchSize)
           });
         };
 
+        let messageMailbox = inboxMailbox;
+        if (msgRes.data.labelIds && msgRes.data.labelIds.length > 0) {
+          const matchedMailbox = accountMailboxes.find((mb) =>
+            msgRes.data.labelIds.includes(mb.path)
+          );
+          if (matchedMailbox) {
+            messageMailbox = matchedMailbox;
+          }
+        }
+
         messages.push({
           account: account._id,
+          mailbox: messageMailbox._id,
           uid: msg.id,
           subject: headers.subject || "",
           from: parseEmail(headers.from),
@@ -134,22 +180,47 @@ const fetchAndSaveGmailMessages = async (account, lastFetchTimestamp, batchSize)
           headers,
         });
       }
-      
+
       await saveMessagesToDatabase(account._id, messages);
       nextPageToken = res.data.nextPageToken;
     } while (nextPageToken);
-
   } catch (error) {
     console.error("❌ Error fetching Gmail messages:", error.message);
     throw error;
   }
 };
 
-const fetchAndSaveOutlookMessages = async (account, lastFetchTimestamp, batchSize) => {
+const fetchAndSaveOutlookMessages = async (
+  account,
+  lastFetchTimestamp,
+  batchSize
+) => {
   try {
     const accessToken = await refreshOAuthToken(account);
     if (!accessToken)
       throw new Error("❌ Failed to refresh OAuth token for Outlook");
+
+    // Get all mailboxes for this account
+    const accountMailboxes = await Mailbox.find({ account: account._id });
+
+    // Ensure at least INBOX exists for fallback
+    let inboxMailbox = accountMailboxes.find((mb) => mb.name === "INBOX");
+    if (!inboxMailbox && accountMailboxes.length > 0) {
+      // If no INBOX but other mailboxes exist, use the first one as fallback
+      inboxMailbox = accountMailboxes[0];
+    } else if (!inboxMailbox) {
+      // If no mailboxes at all, create INBOX as last resort
+      inboxMailbox = await Mailbox.create({
+        account: account._id,
+        name: "INBOX",
+        path: "INBOX",
+        totalMessages: 0,
+        unseenMessages: 0,
+      });
+      console.log(
+        "Created INBOX mailbox for Outlook account as no mailboxes existed"
+      );
+    }
 
     const params = { $top: batchSize };
 
@@ -171,28 +242,46 @@ const fetchAndSaveOutlookMessages = async (account, lastFetchTimestamp, batchSiz
 
       const messages = res.data.value || [];
       if (messages.length === 0) break;
-      const formattedMessages = messages.map((msg) => ({
-        account: account._id,
-        uid: msg.id,
-        subject: msg.subject || "",
-        from: msg.from?.emailAddress?.address
-          ? {
-              name: msg.from.emailAddress.name,
-              address: msg.from.emailAddress.address,
-            }
-          : "",
-        to:
-          msg.toRecipients
-            ?.map((r) =>
-              r.emailAddress
-                ? { name: r.emailAddress.name, address: r.emailAddress.address }
-                : null
-            )
-            .filter(Boolean) || [],
-        date: new Date(msg.receivedDateTime),
-        body: msg.body?.content || "",
-      }));
-      
+      const formattedMessages = messages.map((msg) => {
+        let messageMailbox = inboxMailbox;
+
+        // If message has parentFolderId, try to find matching mailbox
+        if (msg.parentFolderId) {
+          const matchedMailbox = accountMailboxes.find(
+            (mb) => mb.path === msg.parentFolderId
+          );
+          if (matchedMailbox) {
+            messageMailbox = matchedMailbox;
+          }
+        }
+
+        return {
+          account: account._id,
+          mailbox: messageMailbox._id,
+          uid: msg.id,
+          subject: msg.subject || "",
+          from: msg.from?.emailAddress?.address
+            ? {
+                name: msg.from.emailAddress.name,
+                address: msg.from.emailAddress.address,
+              }
+            : "",
+          to:
+            msg.toRecipients
+              ?.map((r) =>
+                r.emailAddress
+                  ? {
+                      name: r.emailAddress.name,
+                      address: r.emailAddress.address,
+                    }
+                  : null
+              )
+              .filter(Boolean) || [],
+          date: new Date(msg.receivedDateTime),
+          body: msg.body?.content || "",
+        };
+      });
+
       await saveMessagesToDatabase(account._id, formattedMessages);
       nextLink = res.data["@odata.nextLink"] || null;
     }
@@ -202,7 +291,12 @@ const fetchAndSaveOutlookMessages = async (account, lastFetchTimestamp, batchSiz
   }
 };
 
-const fetchAndSaveIMAPMessages = async (account, criteria, lastFetchTimestamp, batchSize) => {
+const fetchAndSaveIMAPMessages = async (
+  account,
+  criteria,
+  lastFetchTimestamp,
+  batchSize
+) => {
   try {
     const client = new ImapFlow({
       host: account.imap.host,
@@ -246,16 +340,19 @@ const fetchAndSaveIMAPMessages = async (account, criteria, lastFetchTimestamp, b
 
         for (let i = 0; i < messagesToFetch.length; i += batchSize) {
           const batchUIDs = messagesToFetch.slice(i, i + batchSize);
-          
+
           if (batchUIDs.length === 0) continue;
-          
+
           const batchMessages = [];
-          
-          for await (const msg of client.fetch({ uid: batchUIDs }, {
-            uid: true,
-            envelope: true,
-            source: true,
-          })) {
+
+          for await (const msg of client.fetch(
+            { uid: batchUIDs },
+            {
+              uid: true,
+              envelope: true,
+              source: true,
+            }
+          )) {
             if (!msg.source) {
               console.warn(`⚠️ No source found for UID: ${msg.uid}`);
               continue;
@@ -276,10 +373,9 @@ const fetchAndSaveIMAPMessages = async (account, criteria, lastFetchTimestamp, b
               flags: msg.flags || [],
             });
           }
-          
+
           await saveMessagesToDatabase(account._id, batchMessages);
         }
-        
       } catch (err) {
         console.error(
           `❌ Error processing mailbox ${mailbox.path}: ${err.message}`
