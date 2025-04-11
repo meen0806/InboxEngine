@@ -6,6 +6,7 @@ const Attachment = require("../models/attachment");
 const { google } = require("googleapis");
 const axios = require("axios");
 const Account = require("../models/account");
+const mongoose = require("mongoose");
 
 const refreshOAuthToken = async (account) => {
   const oauth2Client = new google.auth.OAuth2(
@@ -50,34 +51,83 @@ const saveMessagesToDatabase = async (accountId, messages) => {
 
 const fetchAndSaveMessages = async (account, criteria) => {
   try {
-    const lastFetchTimestamp = account.lastFetchTimestamp || null;
+    let accountObj = account;
+    if (
+      typeof account === "string" ||
+      account instanceof mongoose.Types.ObjectId
+    ) {
+      accountObj = await Account.findById(account);
+      if (!accountObj) {
+        throw new Error(`Account not found with ID: ${account}`);
+      }
+    }
+
+    // Ensure accountObj has required properties
+    if (!accountObj.type) {
+      throw new Error('Account object missing "type" property');
+    }
+
+    console.log(
+      `🔍 Processing message fetch for ${accountObj.type} account: ${accountObj.email}`
+    );
+
+    const lastFetchTimestamp = accountObj.lastFetchTimestamp || null;
     const BATCH_SIZE = 50;
     let allMessages = [];
 
-    if (account.type === "gmail") {
-      await fetchAndSaveGmailMessages(account, lastFetchTimestamp, BATCH_SIZE);
-    } else if (account.type === "outlook") {
-      await fetchAndSaveOutlookMessages(
-        account,
+    if (accountObj.type === "gmail") {
+      if (
+        !accountObj.oauth2 ||
+        !accountObj.oauth2.tokens ||
+        !accountObj.oauth2.tokens.access_token
+      ) {
+        throw new Error("Gmail account missing OAuth credentials");
+      }
+      await fetchAndSaveGmailMessages(
+        accountObj,
         lastFetchTimestamp,
         BATCH_SIZE
       );
-    } else {
+    } else if (accountObj.type === "outlook") {
+      if (
+        !accountObj.oauth2 ||
+        !accountObj.oauth2.tokens ||
+        !accountObj.oauth2.tokens.access_token
+      ) {
+        throw new Error("Outlook account missing OAuth credentials");
+      }
+      await fetchAndSaveOutlookMessages(
+        accountObj,
+        lastFetchTimestamp,
+        BATCH_SIZE
+      );
+    } else if (accountObj.type === "imap") {
+      if (
+        !accountObj.imap ||
+        !accountObj.imap.host ||
+        !accountObj.imap.auth ||
+        !accountObj.imap.auth.user
+      ) {
+        throw new Error("IMAP account missing required credentials");
+      }
       await fetchAndSaveIMAPMessages(
-        account,
+        accountObj,
         criteria,
         lastFetchTimestamp,
         BATCH_SIZE
       );
+    } else {
+      throw new Error(`Unsupported account type: ${accountObj.type}`);
     }
 
     const currentTime = new Date();
-    await Account.findByIdAndUpdate(account._id, {
+    await Account.findByIdAndUpdate(accountObj._id, {
       lastFetchTimestamp: currentTime,
     });
 
     return allMessages;
   } catch (err) {
+    console.error(`❌ Error in fetchAndSaveMessages: ${err.message}`);
     throw err;
   }
 };
