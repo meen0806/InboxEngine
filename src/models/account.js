@@ -186,42 +186,60 @@ accountSchema.post("save", async function (account) {
           return;
         }
 
-        // 1. First fetch and save mailboxes
         console.log(`🔄 Fetching mailboxes for account: ${account.email}`);
         await fetchAndSaveMailboxes(account);
         console.log(
           `✅ Successfully fetched mailboxes for account: ${account.email}`
         );
 
-        // 2. Get the required services for fetching messages
-        const messageService = require("../services/message.service");
         const accountId = account._id.toString();
 
-        // 3. Fetch the account with a proper structure
-        const Account = mongoose.model("Account");
-        const refreshedAccount = await Account.findById(accountId);
+        setImmediate(async () => {
+          try {
+            // Get the required services for fetching messages
+            const messageService = require("../services/message.service");
+            const Account = mongoose.model("Account");
 
-        if (!refreshedAccount) {
-          console.error(
-            `❌ Could not re-fetch account ${account.email} for message fetching`
-          );
-          return;
-        }
+            const refreshedAccount = await Account.findById(accountId);
 
-        // 4. Fetch messages based on account type
-        console.log(
-          `🔄 Fetching messages for ${account.type} account: ${account.email}`
-        );
-        await messageService.fetchAndSaveMessages(refreshedAccount, {});
-        console.log(
-          `✅ Successfully fetched messages for account: ${account.email}`
-        );
+            if (!refreshedAccount) {
+              console.error(
+                `❌ Could not re-fetch account ${account.email} for message fetching`
+              );
+              return;
+            }
+
+            console.log(
+              `🔄 Starting background fetch of messages for ${refreshedAccount.type} account: ${refreshedAccount.email}`
+            );
+
+            await messageService.fetchAndSaveMessages(refreshedAccount, {});
+
+            console.log(
+              `✅ Successfully completed background fetch of messages for account: ${refreshedAccount.email}`
+            );
+
+            await Account.findByIdAndUpdate(accountId, {
+              lastFetchTimestamp: new Date(),
+            });
+
+            console.log(
+              `📅 Updated lastFetchTimestamp for account: ${refreshedAccount.email}`
+            );
+          } catch (bgFetchError) {
+            console.error(
+              `❌ Error in background message fetching for account ${account.email}:`,
+              bgFetchError.message
+            );
+            console.error(bgFetchError.stack);
+          }
+        });
       } catch (fetchError) {
         console.error(
-          `❌ Error fetching mailboxes/messages for account ${account.email}:`,
+          `❌ Error fetching mailboxes for account ${account.email}:`,
           fetchError.message
         );
-        console.error(fetchError.stack); // Log the stack trace for better debugging
+        console.error(fetchError.stack);
       }
     }
   } catch (error) {
@@ -229,7 +247,7 @@ accountSchema.post("save", async function (account) {
       `❌ Error in post-save processing for account ${account.email}:`,
       error.message
     );
-    console.error(error.stack); // Log the stack trace for better debugging
+    console.error(error.stack);
   }
 });
 
