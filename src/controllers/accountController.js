@@ -1,7 +1,6 @@
 const Account = require("../models/account");
 const { verifyAccountCredentials } = require("../services/accountService");
 const { verifyAccountCallback } = require("../callbacks/accountCallback");
-const { fetchAndSaveMessages } = require("../services/message.service");
 
 exports.listAccounts = async (req, res) => {
   const { orgId } = req.query;
@@ -39,10 +38,6 @@ exports.createAccount = async (req, res) => {
     }
 
     await newAccount.save();
-    
-    fetchAndSaveMessages(newAccount, {})
-      .catch(err => console.error('Error loading messages:', err));
-    
     res.status(201).json(newAccount);
   } catch (err) {
     res
