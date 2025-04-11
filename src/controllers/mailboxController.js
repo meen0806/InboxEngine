@@ -27,6 +27,7 @@ exports.getMessages = async (req, res) => {
     const { account, mailbox } = req.params;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
+    const searchQuery = req.query.search || "";
 
     if (page <= 0 || limit <= 0) {
       return res.status(400).json({
@@ -37,21 +38,27 @@ exports.getMessages = async (req, res) => {
 
     const skip = (page - 1) * limit;
 
-    const query = Message.find({
+    const query = {
       account: account,
       mailbox: mailbox,
-    });
+    };
 
-    const messages = await query
+    if (searchQuery) {
+      query.$or = [
+        { subject: { $regex: searchQuery, $options: "i" } },
+        { body: { $regex: searchQuery, $options: "i" } },
+        { "from.name": { $regex: searchQuery, $options: "i" } },
+        { "from.address": { $regex: searchQuery, $options: "i" } }
+      ];
+    }
+
+    const messages = await Message.find(query)
       .sort({ date: -1 })
       .skip(skip)
       .limit(limit)
       .exec();
 
-    const totalMessages = await Message.countDocuments({
-      account: account,
-      mailbox: mailbox,
-    });
+    const totalMessages = await Message.countDocuments(query);
 
     const totalPages = Math.ceil(totalMessages / limit);
 
