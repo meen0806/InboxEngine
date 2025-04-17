@@ -13,7 +13,7 @@ const accountSchema = new mongoose.Schema({
   subconnections: [{ type: String }],
   webhooks: { type: String },
   copy: { type: Boolean },
-  msg_per_day: { type: Number },
+  limit: { type: Number },
   time_gap: { type: Number },
   logs: { type: Boolean, default: false },
   notifyFrom: { type: Date, default: Date.now },
