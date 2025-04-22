@@ -7,24 +7,33 @@ const { google } = require("googleapis");
 const axios = require("axios");
 const Account = require("../models/account");
 const mongoose = require("mongoose");
+const outlookService = require("./outlookService");
+const { fetchAndSaveMailboxes } = require("./mailboxService");
 
 const refreshOAuthToken = async (account) => {
-  const oauth2Client = new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI
-  );
+  if (account.type === "gmail") {
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      process.env.GOOGLE_REDIRECT_URI
+    );
 
-  const refreshToken =
-    account.oauth2.tokens.refresh_token || process.env.GOOGLE_REFRESH_TOKEN;
-  if (!refreshToken) {
-    throw new Error("❌ No refresh token available!");
+    const refreshToken =
+      account.oauth2.tokens.refresh_token || process.env.GOOGLE_REFRESH_TOKEN;
+    if (!refreshToken) {
+      throw new Error("No refresh token available!");
+    }
+
+    oauth2Client.setCredentials({ refresh_token: refreshToken });
+
+    const { credentials } = await oauth2Client.refreshAccessToken();
+    return credentials.access_token;
+  } else if (account.type === "outlook") {
+    const tokens = await outlookService.refreshMicrosoftOAuthToken(account);
+    return tokens.access_token;
+  } else {
+    throw new Error(`Unsupported account type for OAuth: ${account.type}`);
   }
-
-  oauth2Client.setCredentials({ refresh_token: refreshToken });
-
-  const { credentials } = await oauth2Client.refreshAccessToken();
-  return credentials.access_token;
 };
 
 const saveMessagesToDatabase = async (accountId, messages) => {
@@ -36,15 +45,15 @@ const saveMessagesToDatabase = async (accountId, messages) => {
       });
 
       if (existingMessage) {
-        console.log(`🔄 Updating existing message: ${message.subject}`);
+        console.log(`Updating existing message: ${message.subject}`);
         await Message.updateOne({ _id: existingMessage._id }, message);
       } else {
-        console.log(`✅ Saving new message: ${message.subject}`);
+        console.log(`Saving new message: ${message.subject}`);
         await Message.create(message);
       }
     }
   } catch (error) {
-    console.error("❌ Error saving messages:", error.message);
+    console.error("Error saving messages:", error.message);
     throw error;
   }
 };
@@ -62,7 +71,6 @@ const fetchAndSaveMessages = async (account, criteria) => {
       }
     }
 
-    // Ensure accountObj has required properties
     if (!accountObj.type) {
       throw new Error('Account object missing "type" property');
     }
@@ -142,16 +150,12 @@ const fetchAndSaveGmailMessages = async (
     if (!accessToken)
       throw new Error("Failed to refresh OAuth token for Gmail");
 
-    // Get all mailboxes for this account
     const accountMailboxes = await Mailbox.find({ account: account._id });
 
-    // Ensure at least INBOX exists for fallback
     let inboxMailbox = accountMailboxes.find((mb) => mb.name === "INBOX");
     if (!inboxMailbox && accountMailboxes.length > 0) {
-      // If no INBOX but other mailboxes exist, use the first one as fallback
       inboxMailbox = accountMailboxes[0];
     } else if (!inboxMailbox) {
-      // If no mailboxes at all, create INBOX as last resort
       inboxMailbox = await Mailbox.create({
         account: account._id,
         name: "INBOX",
@@ -235,7 +239,7 @@ const fetchAndSaveGmailMessages = async (
       nextPageToken = res.data.nextPageToken;
     } while (nextPageToken);
   } catch (error) {
-    console.error("❌ Error fetching Gmail messages:", error.message);
+    console.error("Error fetching Gmail messages:", error.message);
     throw error;
   }
 };
@@ -246,97 +250,124 @@ const fetchAndSaveOutlookMessages = async (
   batchSize
 ) => {
   try {
-    const accessToken = await refreshOAuthToken(account);
-    if (!accessToken)
-      throw new Error("❌ Failed to refresh OAuth token for Outlook");
+    const tokens = await outlookService.refreshMicrosoftOAuthToken(account);
+    if (!tokens.access_token) {
+      throw new Error("Failed to refresh OAuth token for Outlook");
+    }
+    
+    const accessToken = tokens.access_token;
 
-    // Get all mailboxes for this account
     const accountMailboxes = await Mailbox.find({ account: account._id });
+    
+    if (accountMailboxes.length === 0) {
+      console.log("No mailboxes found for this account. Refreshing mailboxes first...");
+      await fetchAndSaveMailboxes(account);
+      const refreshedMailboxes = await Mailbox.find({ account: account._id });
+      if (refreshedMailboxes.length === 0) {
+        throw new Error("No mailboxes found even after refresh");
+      }
+      accountMailboxes.push(...refreshedMailboxes);
+    }
 
-    // Ensure at least INBOX exists for fallback
-    let inboxMailbox = accountMailboxes.find((mb) => mb.name === "INBOX");
+    let inboxMailbox = accountMailboxes.find((mb) => 
+      mb.name === "Inbox" || mb.name.toLowerCase() === "inbox" || mb.path === "inbox");
+      
     if (!inboxMailbox && accountMailboxes.length > 0) {
-      // If no INBOX but other mailboxes exist, use the first one as fallback
       inboxMailbox = accountMailboxes[0];
     } else if (!inboxMailbox) {
-      // If no mailboxes at all, create INBOX as last resort
       inboxMailbox = await Mailbox.create({
         account: account._id,
-        name: "INBOX",
-        path: "INBOX",
+        name: "Inbox",
+        path: "inbox",
         totalMessages: 0,
         unseenMessages: 0,
       });
       console.log(
-        "Created INBOX mailbox for Outlook account as no mailboxes existed"
+        "Created Inbox mailbox for Outlook account as no mailboxes existed"
       );
     }
 
-    const params = { $top: batchSize };
+    let totalSaved = 0;
+    let totalAttempted = 0;
 
-    if (lastFetchTimestamp) {
-      const formattedTime = lastFetchTimestamp.toISOString();
-      params.$filter = `receivedDateTime gt ${formattedTime}`;
-    }
-
-    let nextLink = `https://graph.microsoft.com/v1.0/me/messages`;
-
-    while (nextLink) {
-      const res = await axios.get(nextLink, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-        params:
-          nextLink === `https://graph.microsoft.com/v1.0/me/messages`
-            ? params
-            : {},
-      });
-
-      const messages = res.data.value || [];
-      if (messages.length === 0) break;
-      const formattedMessages = messages.map((msg) => {
-        let messageMailbox = inboxMailbox;
-
-        // If message has parentFolderId, try to find matching mailbox
-        if (msg.parentFolderId) {
-          const matchedMailbox = accountMailboxes.find(
-            (mb) => mb.path === msg.parentFolderId
-          );
-          if (matchedMailbox) {
-            messageMailbox = matchedMailbox;
-          }
+    for (const mailbox of accountMailboxes) {
+      try {
+        console.log(`Fetching messages from ${mailbox.name} mailbox (path: ${mailbox.path})`);
+        totalAttempted++;
+        
+        let folderPath = mailbox.path;
+        if (mailbox.name === "Inbox" || mailbox.name.toLowerCase() === "inbox") {
+          folderPath = "inbox";
+        } else if (mailbox.name === "Sent Items" || mailbox.name === "Sent" || mailbox.name.toLowerCase().includes("sent")) {
+          folderPath = "sentitems";
+        } else if (mailbox.name === "Drafts" || mailbox.name.toLowerCase() === "drafts") {
+          folderPath = "drafts";
+        } else if (mailbox.name === "Deleted Items" || mailbox.name === "Trash" || mailbox.name.toLowerCase().includes("deleted")) {
+          folderPath = "deleteditems";
         }
+        
+        const response = await outlookService.getOutlookMessages(
+          accessToken,
+          folderPath,
+          batchSize,
+          0
+        );
+        
+        const messages = response.messages || [];
+        if (messages.length === 0) {
+          console.log(`No messages found in ${mailbox.name} (path: ${folderPath})`);
+          continue;
+        }
+        
+        console.log(`📥 Found ${messages.length} messages in ${mailbox.name}`);
+        
+        const formattedMessages = messages.map((msg) => {
+          return {
+            account: account._id,
+            mailbox: mailbox._id,
+            uid: msg.id,
+            subject: msg.subject || "",
+            from: msg.from ? [{ 
+              name: msg.from.emailAddress.name,
+              address: msg.from.emailAddress.address
+            }] : [],
+            to: msg.toRecipients 
+              ? msg.toRecipients.map(r => ({
+                  name: r.emailAddress.name,
+                  address: r.emailAddress.address
+                }))
+              : [],
+            date: new Date(msg.receivedDateTime),
+            body: msg.bodyPreview || "",
+            isRead: msg.isRead || false,
+            hasAttachments: msg.hasAttachments || false,
+          };
+        });
 
-        return {
-          account: account._id,
-          mailbox: messageMailbox._id,
-          uid: msg.id,
-          subject: msg.subject || "",
-          from: msg.from?.emailAddress?.address
-            ? {
-                name: msg.from.emailAddress.name,
-                address: msg.from.emailAddress.address,
-              }
-            : "",
-          to:
-            msg.toRecipients
-              ?.map((r) =>
-                r.emailAddress
-                  ? {
-                      name: r.emailAddress.name,
-                      address: r.emailAddress.address,
-                    }
-                  : null
-              )
-              .filter(Boolean) || [],
-          date: new Date(msg.receivedDateTime),
-          body: msg.body?.content || "",
-        };
-      });
-
-      await saveMessagesToDatabase(account._id, formattedMessages);
-      nextLink = res.data["@odata.nextLink"] || null;
+        await saveMessagesToDatabase(account._id, formattedMessages);
+        totalSaved += formattedMessages.length;
+        console.log(`Saved ${formattedMessages.length} messages from ${mailbox.name}`);
+        
+        await Mailbox.findByIdAndUpdate(mailbox._id, {
+          totalMessages: mailbox.totalMessages + formattedMessages.length,
+          updatedAt: new Date()
+        });
+        
+        if (response.hasMoreMessages && response.nextLink) {
+          console.log(`More messages available in ${mailbox.name}, but skipping for now`);
+        }
+      } catch (error) {
+        console.error(`Error fetching messages from ${mailbox.name}: ${error.message}`);
+      }
+    }
+    
+    if (totalSaved === 0 && totalAttempted > 0) {
+      console.warn(`No messages saved from ${totalAttempted} mailboxes. This may indicate an issue with folder IDs.`);
+    } else {
+      console.log(`Total messages saved: ${totalSaved} across all mailboxes`);
     }
   } catch (error) {
-    console.error("❌ Error fetching Outlook messages:", error.message);
+    console.error("Error fetching Outlook messages:", error.message);
     throw error;
   }
 };
@@ -360,20 +391,20 @@ const fetchAndSaveIMAPMessages = async (
     });
 
     await client.connect();
-    console.log("✅ IMAP Connected successfully");
+    console.log("IMAP Connected successfully");
 
     const mailboxes = await Mailbox.find({ account: account._id });
 
     for (const mailbox of mailboxes) {
       if (mailbox.totalMessages === 0) {
-        console.log(`📭 Skipping empty mailbox: ${mailbox.name}`);
+        console.log(`Skipping empty mailbox: ${mailbox.name}`);
         continue;
       }
 
       let lock;
       try {
         lock = await client.getMailboxLock(mailbox.path);
-        console.log(`📂 Fetching emails from: ${mailbox.name}`);
+        console.log(`Fetching emails from: ${mailbox.name}`);
 
         let searchCriteria;
         let messagesToFetch = [];
@@ -404,11 +435,11 @@ const fetchAndSaveIMAPMessages = async (
             }
           )) {
             if (!msg.source) {
-              console.warn(`⚠️ No source found for UID: ${msg.uid}`);
+              console.warn(`No source found for UID: ${msg.uid}`);
               continue;
             }
 
-            console.log(`📩 Found email: ${msg.envelope.subject}`);
+            console.log(`Found email: ${msg.envelope.subject}`);
 
             const parsedMessage = await simpleParser(msg.source);
             batchMessages.push({
@@ -428,7 +459,7 @@ const fetchAndSaveIMAPMessages = async (
         }
       } catch (err) {
         console.error(
-          `❌ Error processing mailbox ${mailbox.path}: ${err.message}`
+          `Error processing mailbox ${mailbox.path}: ${err.message}`
         );
       } finally {
         if (lock) lock.release();
@@ -437,7 +468,7 @@ const fetchAndSaveIMAPMessages = async (
 
     await client.logout();
   } catch (err) {
-    console.error("❌ Error fetching IMAP messages:", err.message);
+    console.error("Error fetching IMAP messages:", err.message);
     throw err;
   }
 };

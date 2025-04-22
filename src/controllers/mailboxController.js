@@ -36,6 +36,14 @@ exports.getMessages = async (req, res) => {
       });
     }
 
+    const mailboxExists = await Mailbox.findById(mailbox);
+    if (!mailboxExists) {
+      return res.status(404).json({
+        status: "fail",
+        message: "Mailbox not found.",
+      });
+    }
+
     const skip = (page - 1) * limit;
 
     const query = {
@@ -62,26 +70,19 @@ exports.getMessages = async (req, res) => {
 
     const totalPages = Math.ceil(totalMessages / limit);
 
-    if (messages.length === 0 && totalMessages === 0) {
-      return res.status(404).json({
-        status: "fail",
-        message: "No messages found for the given account and mailbox.",
-        totalMessages,
-      });
-    }
-
-    res.status(200).json({
+    return res.status(200).json({
       status: "success",
-      message: "Messages retrieved successfully.",
+      message: totalMessages > 0 ? "Messages retrieved successfully." : "No messages found for the given mailbox.",
       data: {
-        messages,
+        messages: messages || [],
         totalMessages,
-        totalPages,
+        totalPages: totalPages || 1,
         currentPage: page,
         hasMore: page < totalPages,
       },
     });
   } catch (err) {
+    console.error(`Error in getMessages: ${err.message}`);
     res.status(500).json({
       status: "error",
       message: "Failed to fetch messages",
