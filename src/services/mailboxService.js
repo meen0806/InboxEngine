@@ -128,7 +128,7 @@ const fetchAndSaveMessages = async (account, criteria) => {
             from: parsedMessage.from?.value || [],
             to: parsedMessage.to?.value || [],
             date: parsedMessage.date || new Date(),
-            body: parsedMessage.text || parsedMessage.html || "",
+            body: parsedMessage.html || parsedMessage.text || "",
             flags: msg.flags || [],
           });
 
@@ -441,13 +441,28 @@ const fetchAndSaveOutlookMessages = async (account, mailbox, limit = 50) => {
           from: msg.from ? [{ address: msg.from.emailAddress.address, name: msg.from.emailAddress.name }] : [],
           to: msg.toRecipients ? msg.toRecipients.map(r => ({ address: r.emailAddress.address, name: r.emailAddress.name })) : [],
           date: msg.receivedDateTime ? new Date(msg.receivedDateTime) : new Date(),
-          body: msg.bodyPreview || "",
+          body: "", 
           isRead: msg.isRead || false,
           hasAttachments: msg.hasAttachments || false,
         });
         
         await newMessage.save();
         console.log(`Saved new message: ${newMessage.uid}`);
+        try {
+          const fullMessageData = await outlookService.getOutlookMessageDetail(tokens.access_token, msg.id);
+          if (fullMessageData && fullMessageData.body && fullMessageData.body.content) {
+            newMessage.body = fullMessageData.body.content;
+            await newMessage.save();
+            console.log(`Updated message ${newMessage.uid} with full body content`);
+          } else {
+            newMessage.body = msg.bodyPreview || "";
+            await newMessage.save();
+          }
+        } catch (bodyError) {
+          console.error(`Error fetching full body for message ${msg.id}: ${bodyError.message}`);
+          newMessage.body = msg.bodyPreview || "";
+          await newMessage.save();
+        }
       } catch (err) {
         console.error(`❌ Error saving message ${msg.id}: ${err.message}`);
       }

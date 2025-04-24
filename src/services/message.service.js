@@ -194,6 +194,7 @@ const fetchAndSaveGmailMessages = async (
         const msgRes = await gmail.users.messages.get({
           userId: "me",
           id: msg.id,
+          format: "full",
         });
 
         const headers = msgRes.data.payload.headers.reduce((acc, header) => {
@@ -229,7 +230,7 @@ const fetchAndSaveGmailMessages = async (
           from: parseEmail(headers.from),
           to: parseEmail(headers.to),
           date: new Date(parseInt(msgRes.data.internalDate)),
-          body: msgRes.data.snippet || "",
+          body: getEmailBody(msgRes.data.payload) || msgRes.data.snippet || "",
           flags: msgRes.data.labelIds || [],
           headers,
         });
@@ -242,6 +243,42 @@ const fetchAndSaveGmailMessages = async (
     console.error("Error fetching Gmail messages:", error.message);
     throw error;
   }
+};
+
+const getEmailBody = (payload) => {
+  if (!payload) return null;
+
+  if (payload.body && payload.body.data) {
+    return Buffer.from(payload.body.data, 'base64').toString('utf-8');
+  }
+  
+  if (payload.parts && payload.parts.length) {
+    let textPlain = '';
+    let textHtml = '';
+    
+    const findBodyParts = (parts) => {
+      for (const part of parts) {
+        const mimeType = part.mimeType;
+        if (part.body && part.body.data) {
+          if (mimeType === 'text/plain') {
+            textPlain = Buffer.from(part.body.data, 'base64').toString('utf-8');
+          } else if (mimeType === 'text/html') {
+            textHtml = Buffer.from(part.body.data, 'base64').toString('utf-8');
+          }
+        }
+        
+        if (part.parts && part.parts.length) {
+          findBodyParts(part.parts);
+        }
+      }
+    };
+    
+    findBodyParts(payload.parts);
+    
+    return textHtml || textPlain;
+  }
+  
+  return null;
 };
 
 const fetchAndSaveOutlookMessages = async (
@@ -306,11 +343,19 @@ const fetchAndSaveOutlookMessages = async (
           folderPath = "deleteditems";
         }
         
+        let filter = '';
+        if (lastFetchTimestamp) {
+          const formattedDate = lastFetchTimestamp.toISOString();
+          filter = `receivedDateTime gt ${formattedDate}`;
+          console.log(`Filtering messages received after: ${formattedDate}`);
+        }
+        
         const response = await outlookService.getOutlookMessages(
           accessToken,
           folderPath,
           batchSize,
-          0
+          0,
+          filter
         );
         
         const messages = response.messages || [];
@@ -338,12 +383,27 @@ const fetchAndSaveOutlookMessages = async (
                 }))
               : [],
             date: new Date(msg.receivedDateTime),
-            body: msg.bodyPreview || "",
+            body: "", 
             isRead: msg.isRead || false,
             hasAttachments: msg.hasAttachments || false,
           };
         });
 
+        for (const formattedMessage of formattedMessages) {
+          try {
+            const fullMessage = await outlookService.getOutlookMessageDetail(accessToken, formattedMessage.uid);
+            if (fullMessage && fullMessage.body) {
+              formattedMessage.body = fullMessage.body.content || formattedMessage.body;
+            }
+          } catch (error) {
+            console.error(`Error fetching full content for message ${formattedMessage.uid}: ${error.message}`);
+            const originalMessage = messages.find(m => m.id === formattedMessage.uid);
+            if (originalMessage) {
+              formattedMessage.body = originalMessage.bodyPreview || "";
+            }
+          }
+        }
+        
         await saveMessagesToDatabase(account._id, formattedMessages);
         totalSaved += formattedMessages.length;
         console.log(`Saved ${formattedMessages.length} messages from ${mailbox.name}`);
@@ -450,7 +510,7 @@ const fetchAndSaveIMAPMessages = async (
               from: parsedMessage.from?.value || [],
               to: parsedMessage.to?.value || [],
               date: parsedMessage.date || new Date(),
-              body: parsedMessage.text || parsedMessage.html || "",
+              body: parsedMessage.html || parsedMessage.text || "",
               flags: msg.flags || [],
             });
           }
