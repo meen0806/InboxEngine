@@ -510,7 +510,7 @@ const fetchAndSaveIMAPMessages = async (
               from: parsedMessage.from?.value || [],
               to: parsedMessage.to?.value || [],
               date: parsedMessage.date || new Date(),
-              body: parsedMessage.text || parsedMessage.html || "",
+              body: parsedMessage.html || parsedMessage.text || "",
               flags: msg.flags || [],
             });
           }

@@ -235,7 +235,7 @@ const getOutlookMessages = async (accessToken, folderId, limit = 50, skip = 0, f
           Authorization: `Bearer ${accessToken}`,
           Accept: "application/json",
           'Content-Type': 'application/json',
-          'Prefer': 'outlook.body-content-type="text"'
+          'Prefer': 'outlook.body-content-type="html"'
         },
       }
     );
@@ -276,7 +276,7 @@ const getOutlookMessageDetail = async (accessToken, messageId, retries = 3) => {
         headers: {
           Authorization: `Bearer ${accessToken}`,
           Accept: "application/json",
-          'Prefer': 'outlook.body-content-type="text"'
+          'Prefer': 'outlook.body-content-type="html"'
         },
       }
     );
