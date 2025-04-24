@@ -202,7 +202,7 @@ const getOutlookMailboxes = async (accessToken) => {
 };
 
 
-const getOutlookMessages = async (accessToken, folderId, limit = 50, skip = 0) => {
+const getOutlookMessages = async (accessToken, folderId, limit = 50, skip = 0, filter = '') => {
   try {
     console.log(`🔍 Fetching messages from Outlook folder ID: ${folderId}`);
     
@@ -220,7 +220,13 @@ const getOutlookMessages = async (accessToken, folderId, limit = 50, skip = 0) =
       endpoint = `https://graph.microsoft.com/v1.0/me/mailFolders/${folderId}/messages`;
     }
     
-    const queryParams = `?$select=id,subject,bodyPreview,receivedDateTime,from,toRecipients,isRead,hasAttachments&$top=${limit}&$skip=${skip}&$orderby=receivedDateTime desc`;
+    let queryParams = `?$select=id,subject,bodyPreview,receivedDateTime,from,toRecipients,isRead,hasAttachments&$top=${limit}&$skip=${skip}&$orderby=receivedDateTime desc`;
+    
+    // Add filter if provided
+    if (filter) {
+      queryParams += `&$filter=${encodeURIComponent(filter)}`;
+      console.log(`Applied filter: ${filter}`);
+    }
     
     const response = await axios.get(
       `${endpoint}${queryParams}`,

@@ -343,11 +343,19 @@ const fetchAndSaveOutlookMessages = async (
           folderPath = "deleteditems";
         }
         
+        let filter = '';
+        if (lastFetchTimestamp) {
+          const formattedDate = lastFetchTimestamp.toISOString();
+          filter = `receivedDateTime gt ${formattedDate}`;
+          console.log(`Filtering messages received after: ${formattedDate}`);
+        }
+        
         const response = await outlookService.getOutlookMessages(
           accessToken,
           folderPath,
           batchSize,
-          0
+          0,
+          filter
         );
         
         const messages = response.messages || [];
