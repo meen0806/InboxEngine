@@ -2,6 +2,7 @@ const { default: axios } = require("axios");
 const nodemailer = require("nodemailer");
 const { refreshOAuthToken } = require("../services/oauthService");
 const { refreshMicrosoftOAuthToken } = require("../services/outlookService");
+const { google } = require("googleapis");
 
 const sendEmailFromGoogle = async (accessToken, fromEmail, toEmail, expiryTime, account,emailbody) => {
   if (!toEmail) {
@@ -17,6 +18,11 @@ const sendEmailFromGoogle = async (accessToken, fromEmail, toEmail, expiryTime, 
     console.log("🔄 Access token expired, refreshing...");
     accessToken = await refreshOAuthToken(account);
   }
+
+  const oauth2Client = new GoogleApis.auth.OAuth2();
+      oauth2Client.setCredentials({ access_token: accessToken });
+  
+      const gmail = google.gmail({ version: "v1", auth: oauth2Client });
 
   console.log("📨 Sending email with token:", accessToken);
 
@@ -52,6 +58,128 @@ const sendEmailFromGoogle = async (accessToken, fromEmail, toEmail, expiryTime, 
     throw new Error("Failed to send email via Google.");
   }
 };
+
+const sendReplayFromGoogle = async (
+  accessToken,
+  fromEmail,
+  toEmail,
+  expiryTime,
+  account,
+  emailbody,
+  originalMessageId,
+  threadId,
+  fromName = "",
+  toName = "",
+  uid
+) => {
+  if (!toEmail) throw new Error("Recipient email address is missing!");
+
+  const isTokenExpired = (expiryDate) => Date.now() >= expiryDate;
+
+  if (isTokenExpired(account.oauth2.tokens.expiry_date)) {
+    console.log("🔄 Access token expired, refreshing...");
+    accessToken = await refreshOAuthToken(account);
+  }
+  
+  const oauth2Client = new google.auth.OAuth2();
+  oauth2Client.setCredentials({ access_token: accessToken });
+  const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+
+  
+  const originalMsg = await gmail.users.messages.get({
+    userId: "me",
+    id: uid,
+    format: "full"
+  });
+
+
+  const headers = originalMsg.data.payload.headers;
+  const fromHeader = headers.find(h => h.name.toLowerCase() === "from")?.value || "";
+  const dateHeader = headers.find(h => h.name.toLowerCase() === "date")?.value || "";
+  console.log(fromHeader,"headerfrom")
+  
+  const match = fromHeader.match(/(.*)<(.*)>/);
+  const originalFromName = match ? match[1].trim() : fromHeader;
+ 
+  let originalFromEmail = match ? match[2].trim() : fromHeader;
+  
+  
+  function extractPlainTextBody(payload) {
+    if (payload.parts) {
+      for (const part of payload.parts) {
+        if (part.mimeType === "text/plain" && part.body?.data) {
+          return Buffer.from(part.body.data, "base64").toString("utf-8");
+        } else if (part.parts) {
+          const nested = extractPlainTextBody(part);
+          if (nested) return nested;
+        }
+      }
+    }
+    return payload.body?.data
+      ? Buffer.from(payload.body.data, "base64").toString("utf-8")
+      : "";
+  }
+
+  const originalMessageBody = extractPlainTextBody(originalMsg.data.payload);
+
+  
+  const quotedOriginal =
+    `\r\n\r\nOn ${dateHeader}, ${originalFromName} &lt;<a href="mailto:${originalFromEmail}">${originalFromEmail}</a>&gt; wrote:\r\n`;
+
+    // const quotedOriginal =
+    // `\r\n\r\nOn ${dateHeader}, ${originalFromName} wrote:\r\n` +
+    // originalMessageBody.split("\n").map((line) => ` ${line}`).join("\n");
+
+    
+
+  
+  const formattedFrom = fromName ? `${fromName} <${fromEmail}>` : `<${fromEmail}>`;
+  const formattedTo = toName ? `${toName} <${toEmail}>` : `<${toEmail}>`;
+
+ 
+ const emailContent =
+  `From: ${formattedFrom}\r\n` +
+  `To: ${formattedTo}\r\n` +
+  `Subject: Re: ${emailbody.subject}\r\n` +
+  `In-Reply-To: ${headers["message-id"]}\r\n` +
+  `References: ${headers["message-id"]}\r\n` +
+  `Content-Type: text/html; charset="UTF-8"\r\n\r\n` +
+  `<div>${emailbody.emailBody}</div>` +
+  `<br><br>` +
+  `<div>${quotedOriginal}</div>`+
+   `<div style="border-left:1px solid #ccc; margin-left:10px; padding-left:10px;">${originalMessageBody.replace(/\n/g, ' ')}</div>`;
+
+
+  const encodedMessage = Buffer.from(emailContent)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+
+  // ✅ 5. Send Reply
+  try {
+    const response = await axios.post(
+      "https://www.googleapis.com/gmail/v1/users/me/messages/send",
+      {
+        raw: encodedMessage,
+        threadId: threadId
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    console.log("✅ Reply sent successfully:", response.status);
+    return response.data;
+  } catch (error) {
+    console.error("❌ Error sending reply via Google:", error.response?.data || error.message);
+    throw new Error("Failed to send reply via Google.");
+  }
+};
+
 
 const sendEmailWithSMTP = async (account, toEmail,emailbody) => {
 
@@ -155,4 +283,4 @@ const sendEmailFromMicrosoft = async (accessToken, fromEmail, toEmail, expiryTim
   }
 };
 
-module.exports = { sendEmailFromGoogle, sendEmailWithSMTP, sendEmailFromMicrosoft };
+module.exports = { sendEmailFromGoogle, sendEmailWithSMTP, sendEmailFromMicrosoft,sendReplayFromGoogle };
