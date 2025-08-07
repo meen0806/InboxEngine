@@ -9,7 +9,7 @@ const Account = require("../models/account");
 const mongoose = require("mongoose");
 const outlookService = require("./outlookService");
 const { fetchAndSaveMailboxes } = require("./mailboxService");
-const thread = require("../models/thread");
+
 
 const refreshOAuthToken = async (account) => {
   if (account.type === "gmail") {
