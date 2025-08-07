@@ -9,6 +9,7 @@ const Account = require("../models/account");
 const mongoose = require("mongoose");
 const outlookService = require("./outlookService");
 const { fetchAndSaveMailboxes } = require("./mailboxService");
+const thread = require("../models/thread");
 
 const refreshOAuthToken = async (account) => {
   if (account.type === "gmail") {
@@ -36,12 +37,13 @@ const refreshOAuthToken = async (account) => {
   }
 };
 
-const saveMessagesToDatabase = async (accountId, messages) => {
+const saveMessagesToDatabase = async (accountId, messages,threadId="") => {
   try {
     for (const message of messages) {
       const existingMessage = await Message.findOne({
         account: accountId,
         uid: message.uid,
+        threadId
       });
 
       if (existingMessage) {
@@ -92,6 +94,88 @@ const fetchAndSaveMessages = async (account, criteria) => {
         throw new Error("Gmail account missing OAuth credentials");
       }
       await fetchAndSaveGmailMessages(
+        accountObj,
+        lastFetchTimestamp,
+        BATCH_SIZE
+      );
+    } else if (accountObj.type === "outlook") {
+      if (
+        !accountObj.oauth2 ||
+        !accountObj.oauth2.tokens ||
+        !accountObj.oauth2.tokens.access_token
+      ) {
+        throw new Error("Outlook account missing OAuth credentials");
+      }
+      await fetchAndSaveOutlookMessages(
+        accountObj,
+        lastFetchTimestamp,
+        BATCH_SIZE
+      );
+    } else if (accountObj.type === "imap") {
+      if (
+        !accountObj.imap ||
+        !accountObj.imap.host ||
+        !accountObj.imap.auth ||
+        !accountObj.imap.auth.user
+      ) {
+        throw new Error("IMAP account missing required credentials");
+      }
+      await fetchAndSaveIMAPMessages(
+        accountObj,
+        criteria,
+        lastFetchTimestamp,
+        BATCH_SIZE
+      );
+    } else {
+      throw new Error(`Unsupported account type: ${accountObj.type}`);
+    }
+
+    const currentTime = new Date();
+    await Account.findByIdAndUpdate(accountObj._id, {
+      lastFetchTimestamp: currentTime,
+    });
+
+    return allMessages;
+  } catch (err) {
+    console.error(`❌ Error in fetchAndSaveMessages: ${err.message}`);
+    throw err;
+  }
+};
+
+const fetchAndSaveThreads = async (account, criteria) => {
+  try {
+    let accountObj = account;
+    if (
+      typeof account === "string" ||
+      account instanceof mongoose.Types.ObjectId
+    ) {
+      accountObj = await Account.findById(account);
+      if (!accountObj) {
+        throw new Error(`Account not found with ID: ${account}`);
+      }
+    }
+
+    if (!accountObj.type) {
+      throw new Error('Account object missing "type" property');
+    }
+
+    console.log(
+      `🔍 Processing message fetch for ${accountObj.type} account: ${accountObj.email}`
+    );
+
+    const lastFetchTimestamp = accountObj.lastFetchTimestamp || null;
+    const BATCH_SIZE = 50;
+    let allMessages = [];
+
+    if (accountObj.type === "gmail") {
+      if (
+        !accountObj.oauth2 ||
+        !accountObj.oauth2.tokens ||
+        !accountObj.oauth2.tokens.access_token
+      ) {
+        throw new Error("Gmail account missing OAuth credentials");
+      }
+      await fetchAndSaveGmailThreads(
         accountObj,
         lastFetchTimestamp,
         BATCH_SIZE
@@ -244,6 +328,113 @@ const fetchAndSaveGmailMessages = async (
     throw error;
   }
 };
+const fetchAndSaveGmailThreads = async (account, lastFetchTimestamp, batchSize) => {
+  try {
+    const accessToken = await refreshOAuthToken(account);
+    if (!accessToken) throw new Error("Failed to refresh OAuth token for Gmail");
+
+    const accountMailboxes = await Mailbox.find({ account: account._id });
+
+    let inboxMailbox = accountMailboxes.find(mb => mb.name === "INBOX") ||
+      accountMailboxes[0] ||
+      await Mailbox.create({
+        account: account._id,
+        name: "INBOX",
+        path: "INBOX",
+        totalMessages: 0,
+        unseenMessages: 0,
+      });
+
+    const oauth2Client = new google.auth.OAuth2();
+    oauth2Client.setCredentials({ access_token: accessToken });
+    const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+
+    const listParams = { userId: "me", maxResults: batchSize };
+    if (lastFetchTimestamp) {
+      const afterDate = Math.floor(lastFetchTimestamp.getTime() / 1000);
+      listParams.q = `after:${afterDate}`;
+    }
+
+    let nextPageToken = null;
+
+    do {
+      if (nextPageToken) listParams.pageToken = nextPageToken;
+
+      const res = await gmail.users.threads.list(listParams);
+      const threads = res.data.threads || [];
+      if (threads.length === 0) break;
+
+      const messagesToSave = [];
+
+      for (const thread of threads) {
+        const threadRes = await gmail.users.threads.get({
+          userId: "me",
+          id: thread.id,
+          format: "full",
+        });
+
+        for (const msg of threadRes.data.messages) {
+          const headers = msg.payload.headers.reduce((acc, header) => {
+            acc[header.name.toLowerCase()] = header.value;
+            return acc;
+          }, {});
+
+          const parseEmail = (emailString) => {
+            if (!emailString) return [];
+            return emailString.split(",").map((email) => {
+              const match = email.match(/(.*)<(.*)>/);
+              return match
+                ? { name: match[1].trim(), address: match[2].trim() }
+                : { address: email.trim() };
+            });
+          };
+
+          let messageMailbox = inboxMailbox;
+          if (msg.labelIds && msg.labelIds.length > 0) {
+            const matchedMailbox = accountMailboxes.find(mb =>
+              msg.labelIds.includes(mb.path)
+            );
+            if (matchedMailbox) messageMailbox = matchedMailbox;
+          }
+
+          // ✅ Extract reply relationships
+          const messageId = headers["message-id"] || msg.id;
+          const inReplyTo = headers["in-reply-to"] || null;
+          const references = headers["references"]
+            ? headers["references"].split(/\s+/)
+            : [];
+
+          messagesToSave.push({
+            account: account._id,
+            mailbox: messageMailbox._id,
+            uid: msg.id,
+            threadId: msg.threadId,
+            messageId,                  // Unique ID for email
+            inReplyTo,                  // Parent email ID (if this is a reply)
+            references,                 // Full chain of referenced messages
+            subject: headers.subject || "",
+            from: parseEmail(headers.from),
+            to: parseEmail(headers.to),
+            date: new Date(parseInt(msg.internalDate)),
+            body: getEmailBody(msg.payload) || msg.snippet || "",
+            flags: msg.labelIds || [],
+            headers,
+          });
+        }
+      }
+
+      // ✅ Save all messages with parent-child metadata
+      await saveMessagesToDatabase(account._id, messagesToSave,messagesToSave[0].threadId);
+      nextPageToken = res.data.nextPageToken;
+
+    } while (nextPageToken);
+
+  } catch (error) {
+    console.error("Error fetching Gmail threads:", error.message);
+    throw error;
+  }
+};
+
 
 const getEmailBody = (payload) => {
   if (!payload) return null;
@@ -370,6 +561,9 @@ const fetchAndSaveOutlookMessages = async (
           return {
             account: account._id,
             mailbox: mailbox._id,
+            conversationId: msg.conversationId, 
+            messageId: msg.internetMessageId,   
+            inReplyTo: msg.inReplyTo,  
             uid: msg.id,
             subject: msg.subject || "",
             from: msg.from ? [{ 
@@ -533,4 +727,4 @@ const fetchAndSaveIMAPMessages = async (
   }
 };
 
-module.exports = { fetchAndSaveMessages };
+module.exports = { fetchAndSaveMessages,fetchAndSaveThreads };

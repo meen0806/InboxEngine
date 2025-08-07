@@ -4,6 +4,10 @@ const mongoose = require('mongoose');
 const messageSchema = new mongoose.Schema({
   account: { type: mongoose.Schema.Types.ObjectId, ref: 'Account', required: true },
   mailbox: { type: mongoose.Schema.Types.ObjectId, ref: 'Mailbox' },
+  threadId:{type:String},
+  messageId: String,     
+  inReplyTo: String,     
+  references: [String],
   uid: { type: String, required: true },
   subject: { type: String },
   from: [{ name: String, address: String }],
