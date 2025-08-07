@@ -2,12 +2,13 @@ const Account = require("../models/account");
 const Mailbox = require("../models/mailbox");
 const Message = require("../models/message");
 const Attachment = require("../models/attachment");
-const { fetchAndSaveMessages } = require("../services/message.service");
+const { fetchAndSaveMessages, fetchAndSaveThreads } = require("../services/message.service");
 const { fetchAndSaveMailboxes } = require("../services/mailboxService");
 const {
   sendEmailFromGoogle,
   sendEmailFromMicrosoft,
   sendEmailWithSMTP,
+  sendReplayFromGoogle
 } = require("../util/sendEmail");
 
 exports.getMailboxes = async (req, res) => {
@@ -28,6 +29,7 @@ exports.getMessages = async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const searchQuery = req.query.search || "";
+    const filter = req.query.filter || ""
 
     if (page <= 0 || limit <= 0) {
       return res.status(400).json({
@@ -48,7 +50,7 @@ exports.getMessages = async (req, res) => {
 
     const query = {
       account: account,
-      mailbox: mailbox,
+      // mailbox: mailbox,
     };
 
     if (searchQuery) {
@@ -101,6 +103,101 @@ exports.getMessageById = async (req, res) => {
     res
       .status(500)
       .json({ error: "Failed to fetch message", details: err.message });
+  }
+};
+
+exports.getThreadById = async(req,res)=>{
+  try{
+    const {threadId, account} = req.params
+    const msg = await Message.find({threadId:threadId,account:account})
+    if(!msg) return res.status(404).json({ error: "Message not found" });
+    res.status(200).json(msg);
+  }catch(err){
+     res
+      .status(500)
+      .json({ error: "Failed to fetch message", details: err.message });
+  }
+}
+
+
+exports.getThreads = async (req, res) => {
+  try {
+    const { account } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const searchQuery = req.query.search || "";
+    let  filter =  []
+
+    if (req.query.filter) {
+    filter = Array.isArray(req.query.filter) ? req.query.filter : JSON.parse(req.query.filter);
+  } else if (req.query.filters) { // handle 'filters' as well
+    filter = Array.isArray(req.query.filters) ? req.query.filters : JSON.parse(req.query.filters);
+  }
+
+    if (page <= 0 || limit <= 0) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Page and limit must be positive numbers",
+      });
+    }
+
+    const skip = (page - 1) * limit;
+
+    const query = {
+      $and: [{ account: account }] 
+    };
+
+    if (searchQuery) {
+      query.$and.push ({$or:[
+        { subject: { $regex: searchQuery, $options: "i" } },
+        { body: { $regex: searchQuery, $options: "i" } },
+        { "from.name": { $regex: searchQuery, $options: "i" } },
+        { "from.address": { $regex: searchQuery, $options: "i" } }
+      ]})
+    }
+
+
+      filter.forEach(fil => {
+        const f = fil.toLowerCase().replace(" ","")
+        console.log(f)
+      if (f === "allreplies") query.$and.push({ inReplyTo: { $exists: true, $ne: null } });
+      if (f === "unreadonly") query.$and.push({ flags: { $in: ["UNREAD"] } });
+      if (f === "byuser") query.$and.push({ flags: { $in: ["SENT"] } });
+    });
+
+    // 🔹 Default behavior when no filter applied
+    if (filter.length === 0) {
+      query.$and.push({ inReplyTo: null });
+    }
+
+    const messages = await Message.find(query)
+      .sort({ date: -1 })
+      .skip(skip)
+      .limit(limit)
+      .exec();
+
+    const totalMessages = await Message.countDocuments(query);
+
+    const totalPages = Math.ceil(totalMessages / limit);
+
+    return res.status(200).json({
+      status: "success",
+      message: totalMessages > 0 ? "Messages retrieved successfully." : "No messages found for the given mailbox.",
+      data: {
+        messages: messages || [],
+        totalMessages,
+        totalPages: totalPages || 1,
+        currentPage: page,
+        hasMore: page < totalPages,
+      },
+    });
+  } catch (err) {
+    console.error(`Error in getMessages: ${err.message}`);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to fetch messages",
+      details: err.message
+    });
   }
 };
 
@@ -179,6 +276,27 @@ exports.loadMessages = async (req, res) => {
   }
 };
 
+exports.loadThreads = async (req,res)=>{
+  try{
+    const {account} = req.params;
+    const {criteria} = req.body;
+
+    const accountData = await Account.findById(account)
+    if(!accountData){
+      return res.status(404).json({ error: "❌ Account not found" })
+    }
+    const thread = await fetchAndSaveThreads(account,criteria)
+
+    res
+      .status(200)
+      .json({ message: "✅ Messages loaded successfully", thread });
+
+  }catch(err){
+    console.err("❌ Error loading messages:", err.message)
+    res.status(500).json({ error: "❌ Failed to load messages", details: err.message });
+  }
+}
+
 exports.loadMailbox = async (req, res) => {
   const { account } = req.params;
 
@@ -192,7 +310,7 @@ exports.loadMailbox = async (req, res) => {
     // Fetch and save mailboxes for the account
     const mailboxes = await fetchAndSaveMailboxes(accountDetails);
 
-    res.status(201).json({ success: true, mailboxes });
+    res.status(201).json({ success: true, mailboxes ,MESSAGE:Mailbox});
   } catch (error) {
     res.status(500).json({
       error: "Failed to fetch and save mailboxes",
@@ -251,4 +369,31 @@ exports.sendTestEmail = async (req, res) => {
 
 async function runDeliveryTest(deliveryTest) {
   return { success: true, message: `Delivery test ${deliveryTest} successful` };
+}
+
+exports.SendReplyEmail = async(req,res)=>{
+  try{
+    const {to,from, emailTemplate,messageId ,threadId} = req.body;
+
+    // now find the accounts
+    const account = await Account.findOne({email:from.address})
+     if (!account) {
+      return res.status(404).json({ error: "Account not found" });
+    }
+
+    const message = await Message.findOne({messageId:messageId})
+
+    const accessToken  = account?.oauth2?.tokens?.access_token
+    let expiryTime = account?.oauth2?.tokens?.expiry_date;
+
+    if(account.type ==="gmail"){
+      await sendReplayFromGoogle(accessToken,from.address,to.address,expiryTime,account,emailTemplate,messageId,threadId,from.name,to.name,message.uid)
+    }
+    return res
+      .status(200)
+      .json({ code: 200, message: "Email sent successfully" });
+
+  }catch(err){
+    return res.status(500).json({code:500,message:err.message})
+  }
 }

@@ -213,7 +213,7 @@ accountSchema.post("save", async function (account) {
               `🔄 Starting background fetch of messages for ${refreshedAccount.type} account: ${refreshedAccount.email}`
             );
 
-            await messageService.fetchAndSaveMessages(refreshedAccount, {});
+            await messageService.fetchAndSaveThreads(refreshedAccount, {});
 
             console.log(
               `✅ Successfully completed background fetch of messages for account: ${refreshedAccount.email}`
