@@ -219,7 +219,7 @@ const fetchAndSaveThreads = async (account, criteria) => {
 
     return allMessages;
   } catch (err) {
-    console.error(`❌ Error in fetchAndSaveMessages: ${err.message}`);
+    console.error(`❌ Error in fetchAndSaveThreads: ${err.message}`);
     throw err;
   }
 };
@@ -357,6 +357,11 @@ const fetchAndSaveGmailThreads = async (account, lastFetchTimestamp, batchSize) 
 
     let nextPageToken = null;
 
+    // Get all existing UIDs to skip duplicates
+    const existingUids = new Set(
+      await Message.distinct("uid", { account: account._id })
+    );
+
     do {
       if (nextPageToken) listParams.pageToken = nextPageToken;
 
@@ -374,6 +379,10 @@ const fetchAndSaveGmailThreads = async (account, lastFetchTimestamp, batchSize) 
         });
 
         for (const msg of threadRes.data.messages) {
+          if (existingUids.has(msg.id)) {
+            continue; // skip already saved messages
+          }
+
           const headers = msg.payload.headers.reduce((acc, header) => {
             acc[header.name.toLowerCase()] = header.value;
             return acc;
@@ -397,7 +406,6 @@ const fetchAndSaveGmailThreads = async (account, lastFetchTimestamp, batchSize) 
             if (matchedMailbox) messageMailbox = matchedMailbox;
           }
 
-          // ✅ Extract reply relationships
           const messageId = headers["message-id"] || msg.id;
           const inReplyTo = headers["in-reply-to"] || null;
           const references = headers["references"]
@@ -409,9 +417,9 @@ const fetchAndSaveGmailThreads = async (account, lastFetchTimestamp, batchSize) 
             mailbox: messageMailbox._id,
             uid: msg.id,
             threadId: msg.threadId,
-            messageId,                  // Unique ID for email
-            inReplyTo,                  // Parent email ID (if this is a reply)
-            references,                 // Full chain of referenced messages
+            messageId,
+            inReplyTo,
+            references,
             subject: headers.subject || "",
             from: parseEmail(headers.from),
             to: parseEmail(headers.to),
@@ -420,17 +428,30 @@ const fetchAndSaveGmailThreads = async (account, lastFetchTimestamp, batchSize) 
             flags: msg.labelIds || [],
             headers,
           });
+
+          existingUids.add(msg.id); // mark as saved to skip later
         }
       }
 
-      // ✅ Save all messages with parent-child metadata
-      await saveMessagesToDatabase(account._id, messagesToSave,messagesToSave[0].threadId);
+      // ✅ Save using upsert to avoid duplicate key errors
+      for (const msg of messagesToSave) {
+        try {
+          await Message.updateOne(
+            { account: account._id, uid: msg.uid },
+            { $set: msg },
+            { upsert: true }
+          );
+        } catch (err) {
+          console.error(`Failed to save message UID: ${msg.uid}`, err.message);
+        }
+      }
+
       nextPageToken = res.data.nextPageToken;
 
     } while (nextPageToken);
 
   } catch (error) {
-    console.error("Error fetching Gmail threads:", error.message);
+    console.error("❌ Error fetching Gmail threads:", error.message);
     throw error;
   }
 };
