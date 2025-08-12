@@ -159,6 +159,8 @@ const fetchAndSaveThreads = async (account, criteria) => {
       throw new Error('Account object missing "type" property');
     }
 
+         let threadList = await axios.get(`${process.env.BACKEND_BASE_URL}/track/track-email/${accountObj.email}`)
+   
     console.log(
       `🔍 Processing message fetch for ${accountObj.type} account: ${accountObj.email}`
     );
@@ -176,6 +178,7 @@ const fetchAndSaveThreads = async (account, criteria) => {
         throw new Error("Gmail account missing OAuth credentials");
       }
       await fetchAndSaveGmailThreads(
+        threadList.data.data,
         accountObj,
         lastFetchTimestamp,
         BATCH_SIZE
@@ -328,7 +331,7 @@ const fetchAndSaveGmailMessages = async (
     throw error;
   }
 };
-const fetchAndSaveGmailThreads = async (account, lastFetchTimestamp, batchSize) => {
+const fetchAndSaveGmailThreads = async (threadList,account, lastFetchTimestamp, batchSize) => {
   try {
     const accessToken = await refreshOAuthToken(account);
     if (!accessToken) throw new Error("Failed to refresh OAuth token for Gmail");
@@ -349,7 +352,7 @@ const fetchAndSaveGmailThreads = async (account, lastFetchTimestamp, batchSize) 
     oauth2Client.setCredentials({ access_token: accessToken });
     const gmail = google.gmail({ version: "v1", auth: oauth2Client });
 
-    const listParams = { userId: "me", maxResults: batchSize };
+    const listParams = { userId: "me", maxResults: batchSize};
     if (lastFetchTimestamp) {
       const afterDate = Math.floor(lastFetchTimestamp.getTime() / 1000);
       listParams.q = `after:${afterDate}`;
@@ -366,12 +369,25 @@ const fetchAndSaveGmailThreads = async (account, lastFetchTimestamp, batchSize) 
       if (nextPageToken) listParams.pageToken = nextPageToken;
 
       const res = await gmail.users.threads.list(listParams);
+      if (!Array.isArray(res.data.threads)) {
+        
+  console.warn("⚠ Gmail API returned non-array threads:", res.data.threads);
+}
       const threads = res.data.threads || [];
       if (threads.length === 0) break;
 
       const messagesToSave = [];
 
+      
+      const threadSet = new Set(threadList)
+      console.warn(threads,"hello")
+      
       for (const thread of threads) {
+      
+        if(!threadSet.has(thread.id)){
+          continue;
+        }
+      
         const threadRes = await gmail.users.threads.get({
           userId: "me",
           id: thread.id,
@@ -380,7 +396,7 @@ const fetchAndSaveGmailThreads = async (account, lastFetchTimestamp, batchSize) 
 
         for (const msg of threadRes.data.messages) {
           if (existingUids.has(msg.id)) {
-            continue; // skip already saved messages
+            continue; 
           }
 
           const headers = msg.payload.headers.reduce((acc, header) => {
