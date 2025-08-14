@@ -159,6 +159,8 @@ const fetchAndSaveThreads = async (account, criteria) => {
       throw new Error('Account object missing "type" property');
     }
 
+         let threadList = await axios.get(`${process.env.BACKEND_BASE_URL}/track/track-email/${accountObj.email}`)
+   
     console.log(
       `🔍 Processing message fetch for ${accountObj.type} account: ${accountObj.email}`
     );
@@ -176,6 +178,7 @@ const fetchAndSaveThreads = async (account, criteria) => {
         throw new Error("Gmail account missing OAuth credentials");
       }
       await fetchAndSaveGmailThreads(
+        threadList.data.data,
         accountObj,
         lastFetchTimestamp,
         BATCH_SIZE
@@ -219,7 +222,7 @@ const fetchAndSaveThreads = async (account, criteria) => {
 
     return allMessages;
   } catch (err) {
-    console.error(`❌ Error in fetchAndSaveMessages: ${err.message}`);
+    console.error(`❌ Error in fetchAndSaveThreads: ${err.message}`);
     throw err;
   }
 };
@@ -328,7 +331,7 @@ const fetchAndSaveGmailMessages = async (
     throw error;
   }
 };
-const fetchAndSaveGmailThreads = async (account, lastFetchTimestamp, batchSize) => {
+const fetchAndSaveGmailThreads = async (threadList,account, lastFetchTimestamp, batchSize) => {
   try {
     const accessToken = await refreshOAuthToken(account);
     if (!accessToken) throw new Error("Failed to refresh OAuth token for Gmail");
@@ -349,7 +352,7 @@ const fetchAndSaveGmailThreads = async (account, lastFetchTimestamp, batchSize) 
     oauth2Client.setCredentials({ access_token: accessToken });
     const gmail = google.gmail({ version: "v1", auth: oauth2Client });
 
-    const listParams = { userId: "me", maxResults: batchSize };
+    const listParams = { userId: "me", maxResults: batchSize};
     if (lastFetchTimestamp) {
       const afterDate = Math.floor(lastFetchTimestamp.getTime() / 1000);
       listParams.q = `after:${afterDate}`;
@@ -357,16 +360,34 @@ const fetchAndSaveGmailThreads = async (account, lastFetchTimestamp, batchSize) 
 
     let nextPageToken = null;
 
+    // Get all existing UIDs to skip duplicates
+    const existingUids = new Set(
+      await Message.distinct("uid", { account: account._id })
+    );
+
     do {
       if (nextPageToken) listParams.pageToken = nextPageToken;
 
       const res = await gmail.users.threads.list(listParams);
+      if (!Array.isArray(res.data.threads)) {
+        
+  console.warn("⚠ Gmail API returned non-array threads:", res.data.threads);
+}
       const threads = res.data.threads || [];
       if (threads.length === 0) break;
 
       const messagesToSave = [];
 
+      
+      const threadSet = new Set(threadList)
+      console.warn(threads,"hello")
+      
       for (const thread of threads) {
+      
+        if(!threadSet.has(thread.id)){
+          continue;
+        }
+      
         const threadRes = await gmail.users.threads.get({
           userId: "me",
           id: thread.id,
@@ -374,6 +395,10 @@ const fetchAndSaveGmailThreads = async (account, lastFetchTimestamp, batchSize) 
         });
 
         for (const msg of threadRes.data.messages) {
+          if (existingUids.has(msg.id)) {
+            continue; 
+          }
+
           const headers = msg.payload.headers.reduce((acc, header) => {
             acc[header.name.toLowerCase()] = header.value;
             return acc;
@@ -397,7 +422,6 @@ const fetchAndSaveGmailThreads = async (account, lastFetchTimestamp, batchSize) 
             if (matchedMailbox) messageMailbox = matchedMailbox;
           }
 
-          // ✅ Extract reply relationships
           const messageId = headers["message-id"] || msg.id;
           const inReplyTo = headers["in-reply-to"] || null;
           const references = headers["references"]
@@ -409,9 +433,9 @@ const fetchAndSaveGmailThreads = async (account, lastFetchTimestamp, batchSize) 
             mailbox: messageMailbox._id,
             uid: msg.id,
             threadId: msg.threadId,
-            messageId,                  // Unique ID for email
-            inReplyTo,                  // Parent email ID (if this is a reply)
-            references,                 // Full chain of referenced messages
+            messageId,
+            inReplyTo,
+            references,
             subject: headers.subject || "",
             from: parseEmail(headers.from),
             to: parseEmail(headers.to),
@@ -420,17 +444,30 @@ const fetchAndSaveGmailThreads = async (account, lastFetchTimestamp, batchSize) 
             flags: msg.labelIds || [],
             headers,
           });
+
+          existingUids.add(msg.id); // mark as saved to skip later
         }
       }
 
-      // ✅ Save all messages with parent-child metadata
-      await saveMessagesToDatabase(account._id, messagesToSave,messagesToSave[0].threadId);
+      // ✅ Save using upsert to avoid duplicate key errors
+      for (const msg of messagesToSave) {
+        try {
+          await Message.updateOne(
+            { account: account._id, uid: msg.uid },
+            { $set: msg },
+            { upsert: true }
+          );
+        } catch (err) {
+          console.error(`Failed to save message UID: ${msg.uid}`, err.message);
+        }
+      }
+
       nextPageToken = res.data.nextPageToken;
 
     } while (nextPageToken);
 
   } catch (error) {
-    console.error("Error fetching Gmail threads:", error.message);
+    console.error("❌ Error fetching Gmail threads:", error.message);
     throw error;
   }
 };

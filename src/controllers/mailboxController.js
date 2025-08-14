@@ -292,8 +292,8 @@ exports.loadThreads = async (req,res)=>{
       .json({ message: "✅ Messages loaded successfully", thread });
 
   }catch(err){
-    console.err("❌ Error loading messages:", err.message)
-    res.status(500).json({ error: "❌ Failed to load messages", details: err.message });
+    console.err("❌ Error loading threads:", err.message)
+    res.status(500).json({ error: "❌ Failed to load threads", details: err.message });
   }
 }
 
