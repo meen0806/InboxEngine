@@ -397,3 +397,24 @@ exports.SendReplyEmail = async(req,res)=>{
     return res.status(500).json({code:500,message:err.message})
   }
 }
+
+
+exports.MarkThreadReaded = async(req,res)=>{
+  try{
+    const {threadId} = req.body
+
+    if(threadId){
+      const messages = await Message.find({threadId:threadId})
+      await Message.updateMany({threadId},
+        {$pull:{flags:"UNREAD"}}
+      )
+
+      res.status(200).json({code:200,message:"Thread Readed sucessful"})
+    }else{
+      res.status(400).json({code:400,message:"ThreadId not found"})
+    }
+
+  }catch(err){
+    return res.status(500).json({code:500,message:err.message})
+  }
+}
