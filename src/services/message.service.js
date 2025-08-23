@@ -452,6 +452,10 @@ const fetchAndSaveGmailThreads = async (threadList,account, lastFetchTimestamp, 
       // ✅ Save using upsert to avoid duplicate key errors
       for (const msg of messagesToSave) {
         try {
+          const ParentThread = await Message.findOne({threadId:msg.threadId,inReplyTo:null})
+          if(ParentThread){
+            await Message.findByIdAndUpdate(ParentThread._id,{$addToSet:{flags:"UNREAD"}})
+          }
           await Message.updateOne(
             { account: account._id, uid: msg.uid },
             { $set: msg },
