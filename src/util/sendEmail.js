@@ -13,19 +13,13 @@ const sendEmailFromGoogle = async (accessToken, fromEmail, toEmail, expiryTime, 
     return Date.now() >= expiryDate;
   };
 
-  // Check and refresh token if expired
   if (isTokenExpired(account.oauth2.tokens.expiry_date)) {
     console.log("🔄 Access token expired, refreshing...");
     accessToken = await refreshOAuthToken(account);
   }
 
-  const oauth2Client = new GoogleApis.auth.OAuth2();
-      oauth2Client.setCredentials({ access_token: accessToken });
-  
-      const gmail = google.gmail({ version: "v1", auth: oauth2Client });
-
-  console.log("📨 Sending email with token:", accessToken);
-
+  const oauth2Client = new google.auth.OAuth2();
+  oauth2Client.setCredentials({ access_token: accessToken });
   const emailContent =
     `From: <${fromEmail}>\r\n` +
     `To: <${toEmail}>\r\n` +
