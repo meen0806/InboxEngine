@@ -130,7 +130,17 @@ const refreshOAuthToken = async (account) => {
       throw new Error("OAuth token refresh failed: No access token received.");
     }
 
-    account.oauth2.tokens = {
+    // If account is a plain object (from .lean()), fetch it as a Mongoose document
+    let accountDoc = account;
+    if (typeof account.save !== 'function') {
+      const Account = mongoose.model("Account");
+      accountDoc = await Account.findById(account._id);
+      if (!accountDoc) {
+        throw new Error("Account not found when refreshing token");
+      }
+    }
+
+    accountDoc.oauth2.tokens = {
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token || oauth2.tokens.refresh_token,
       scope: tokens.scope,
@@ -138,8 +148,8 @@ const refreshOAuthToken = async (account) => {
       expiry_date: Date.now() + tokens.expires_in * 1000,
     };
 
-    await account.save();
-    console.log("✅ Token refreshed successfully:", account.oauth2.tokens);
+    await accountDoc.save();
+    console.log("✅ Token refreshed successfully:", accountDoc.oauth2.tokens);
     
     return tokens.access_token;
   } catch (err) {

@@ -136,6 +136,22 @@ const accountSchema = new mongoose.Schema({
   tz: { type: String },
   accessToken: { type: String },
   refreshToken: { type: String },
+  warmup: {
+    enabled: { type: Boolean, default: false },
+    maxPerDay: { type: Number, default: 0 },
+    dailyRampup: { type: Boolean, default: false },
+    rampupIncrement: { type: Number, default: 5 },
+    startDate: { type: Date, default: null },
+    maxEmailsPerDay: { type: Array, default: [0, 0] }, // Maximum number of emails that could be sent via this email account per day
+    replyRate: { type: Number, default: 20, min: 0, max: 100 }, // Reply Rate (%) - Suggested 20, Maximum 100
+    dailyReplyTarget: { type: Number, default: 0 }, // Daily Target for Replies to Inbound Warmup Emails
+    identifierTag: { type: String, default: "" }, // Custom Warmup Identifier Tag (two-worded tag)
+    autoAdjust: { type: Boolean, default: false }, // Enable Auto-adjust warmup/sending ratio
+    customDomainTracking: { type: Boolean, default: false }, // Warmup the Custom Domain tracking Link
+    weekdaysOnly: { type: Boolean, default: false }, // Send warmup emails only on weekdays
+    reputation: { type: Number, default: 100, min: 0, max: 100 }, // Email reputation score (0-100)
+    reputationLastCalculated: { type: Date, default: null },
+  },
   createdAt: { type: Date, default: Date.now },
 });
 
@@ -213,7 +229,7 @@ accountSchema.post("save", async function (account) {
               `🔄 Starting background fetch of messages for ${refreshedAccount.type} account: ${refreshedAccount.email}`
             );
 
-            await messageService.fetchAndSaveThreads(refreshedAccount, {});
+            await messageService.fetchAndSaveMessages(refreshedAccount, {});
 
             console.log(
               `✅ Successfully completed background fetch of messages for account: ${refreshedAccount.email}`

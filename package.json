@@ -4,7 +4,14 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "start:dev": "nodemon src/server.js"
+    "start:dev": "nodemon src/server.js",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop inboxengine",
+    "pm2:restart": "pm2 restart inboxengine",
+    "pm2:delete": "pm2 delete inboxengine",
+    "pm2:logs": "pm2 logs inboxengine",
+    "pm2:monit": "pm2 monit",
+    "test:warmup": "node test-warmup.js"
   },
   "dependencies": {
     "axios": "^1.7.9",
@@ -17,6 +24,7 @@
     "mongodb": "^6.12.0",
     "mongoose": "^6.13.8",
     "morgan": "^1.10.0",
+    "node-cron": "^4.2.1",
     "nodemailer": "^6.10.0",
     "pino": "^9.6.0",
     "swagger-ui-express": "^5.0.1"

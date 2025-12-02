@@ -10,8 +10,12 @@ exports.listAccounts = async (req, res) => {
   }
 
   try {
-    const accounts = await Account.find({ orgId });
-    res.status(200).json(accounts);
+    const accounts = await Account.find({ orgId }).lean();
+    res.status(200).json({
+      code: 200,
+      data: accounts,
+      message: accounts.length > 0 ? "Success" : "No accounts found",
+    });
   } catch (error) {
     res
       .status(500)
@@ -64,25 +68,68 @@ exports.updateAccount = async (req, res) => {
       return res.status(404).json({ error: "Account not found" });
     }
 
-    Object.assign(existingAccount, req.body);
+    const data = req.body;
 
-    const result = await verifyAccountCallback(existingAccount);
-    if (!result.success) {
-      return res
-        .status(400)
-        .json({
-          code: 400,
-          message: "Failed to update account, SMTP verification failed",
-        });
+    const updateData = {};
+
+    if (data.smtp) {
+      updateData.smtp = data.smtp;
     }
+
+    if (data.oauth) {
+      updateData.limit = data.oauth.limit;
+      updateData.time_gap = data.oauth.time_gap;
+    }
+
+    if (data.warmup) {
+      updateData.warmup = data.warmup;
+    }
+
+    const updatedAccount = await Account.findByIdAndUpdate(
+      id,
+      { $set: updateData },
+      { new: true }
+    );
+
+    res.status(200).json({
+      code: 200,
+      message: "Account details updated successfully",
+      data: updatedAccount
+    });
+  } catch (err) {
+    res.status(400).json({
+      error: "Failed to update account",
+      details: err.message
+    });
+  }
+};
+
+exports.updateWarmupSettings = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const existingAccount = await Account.findById(id);
+    if (!existingAccount) {
+      return res.status(404).json({ error: "Account not found" });
+    }
+
+    const wasEnabled = existingAccount.warmup?.enabled || false;
+    Object.assign(existingAccount.warmup, req.body.warmup);
+    const isNowEnabled = existingAccount.warmup?.enabled || false;
 
     const updatedAccount = await existingAccount.save();
 
-    res.status(200).json({code: 200, message: "Acount details updated successfully", data: updatedAccount});
+    if (isNowEnabled && !wasEnabled && existingAccount.state === "connected") {
+      try {
+        const { initializeWarmupJob } = require("../services/warmupJobService");
+        await initializeWarmupJob(updatedAccount);
+      } catch (error) {
+        console.error("Error initializing warmup job:", error.message);
+      }
+    }
+
+    res.status(200).json({ code: 200, message: "Warmup settings updated successfully", data: updatedAccount });
   } catch (err) {
-    res
-      .status(400)
-      .json({ error: "Failed to update account", details: err.message });
+    res.status(400).json({ error: "Failed to update warmup settings", details: err.message });
   }
 };
 

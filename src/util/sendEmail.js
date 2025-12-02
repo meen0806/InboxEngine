@@ -53,16 +53,14 @@ const sendEmailFromGoogle = async (accessToken, fromEmail, toEmail, expiryTime, 
   }
 };
 
-const sendReplayFromGoogle = async (
+const sendReplyFromGoogle = async (
   accessToken,
-  fromEmail,
   toEmail,
   expiryTime,
   account,
   emailbody,
   originalMessageId,
   threadId,
-  fromName = "",
   toName = "",
   uid
 ) => {
@@ -74,6 +72,9 @@ const sendReplayFromGoogle = async (
     console.log("🔄 Access token expired, refreshing...");
     accessToken = await refreshOAuthToken(account);
   }
+
+  const fromName = account.name;
+  const fromEmail = account.email;
   
   const oauth2Client = new google.auth.OAuth2();
   oauth2Client.setCredentials({ access_token: accessToken });
@@ -119,12 +120,6 @@ const sendReplayFromGoogle = async (
   
   const quotedOriginal =
     `\r\n\r\nOn ${dateHeader}, ${originalFromName} &lt;<a href="mailto:${originalFromEmail}">${originalFromEmail}</a>&gt; wrote:\r\n`;
-
-    // const quotedOriginal =
-    // `\r\n\r\nOn ${dateHeader}, ${originalFromName} wrote:\r\n` +
-    // originalMessageBody.split("\n").map((line) => ` ${line}`).join("\n");
-
-    
 
   
   const formattedFrom = fromName ? `${fromName} <${fromEmail}>` : `<${fromEmail}>`;
@@ -206,7 +201,7 @@ const sendEmailWithSMTP = async (account, toEmail,emailbody) => {
   }
 };
 
-const sendEmailFromMicrosoft = async (accessToken, fromEmail, toEmail, expiryTime,emailbody) => {
+const sendEmailFromMicrosoft = async (accessToken, fromEmail, toEmail, expiryTime, emailbody, account) => {
   if (!accessToken) {
     throw new Error("Access token is required!");
   }
@@ -224,7 +219,6 @@ const sendEmailFromMicrosoft = async (accessToken, fromEmail, toEmail, expiryTim
   }
 
   if (isTokenExpired(expiryTime)) {
-    // Check if refresh token exists before refreshing
     if (!account.oauth2.tokens.refresh_token) {
       throw new Error(
         "Missing refresh token. Please log in again to generate a new one."
@@ -277,4 +271,4 @@ const sendEmailFromMicrosoft = async (accessToken, fromEmail, toEmail, expiryTim
   }
 };
 
-module.exports = { sendEmailFromGoogle, sendEmailWithSMTP, sendEmailFromMicrosoft,sendReplayFromGoogle };
+module.exports = { sendEmailFromGoogle, sendEmailWithSMTP, sendEmailFromMicrosoft,sendReplyFromGoogle };
