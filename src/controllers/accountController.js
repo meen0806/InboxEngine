@@ -113,7 +113,28 @@ exports.updateWarmupSettings = async (req, res) => {
     }
 
     const wasEnabled = existingAccount.warmup?.enabled || false;
-    Object.assign(existingAccount.warmup, req.body.warmup);
+    const warmupData = req.body.warmup || {};
+    
+    // Validate dailyReplyTarget: min should be maxPerDay, max should be 100 or unlimited
+    if (warmupData.dailyReplyTarget !== undefined) {
+      const maxPerDay = warmupData.maxPerDay || existingAccount.warmup?.maxPerDay || 0;
+      const dailyReplyTarget = warmupData.dailyReplyTarget;
+      
+      if (dailyReplyTarget < maxPerDay) {
+        return res.status(400).json({ 
+          error: `dailyReplyTarget (${dailyReplyTarget}) must be at least maxPerDay (${maxPerDay})` 
+        });
+      }
+      
+      // Max is 100 or unlimited (we'll allow any value >= maxPerDay)
+      if (dailyReplyTarget > 0 && dailyReplyTarget < maxPerDay) {
+        return res.status(400).json({ 
+          error: `dailyReplyTarget must be at least ${maxPerDay} (maxPerDay value)` 
+        });
+      }
+    }
+    
+    Object.assign(existingAccount.warmup, warmupData);
     const isNowEnabled = existingAccount.warmup?.enabled || false;
 
     const updatedAccount = await existingAccount.save();

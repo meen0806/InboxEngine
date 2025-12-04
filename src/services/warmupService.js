@@ -71,7 +71,9 @@ const calculateEffectiveDailyLimit = (account) => {
   const startDate = new Date(warmup.startDate);
   const daysSinceStart = Math.floor((now - startDate) / (1000 * 60 * 60 * 24));
   
-  const effectiveLimit = baseLimit + (daysSinceStart * increment);
+  const daysInCycle = Math.ceil(baseLimit / increment);
+  const dayInCycle = (daysSinceStart % daysInCycle) + 1;
+  const effectiveLimit = Math.min(dayInCycle * increment, baseLimit);
   
   return Math.max(0, effectiveLimit);
 };
@@ -545,28 +547,10 @@ const runWarmupJob = async () => {
 
         // Check if it's time to send (time distribution)
         if (warmupJob.nextSendTime && warmupJob.nextSendTime > now) {
-          // Check if we're in a send window
-          const sendWindows = warmupJob.sendWindows || [{ startHour: 9, endHour: 17 }];
-          const currentHour = now.getHours();
-          const isInSendWindow = sendWindows.some(window => 
-            currentHour >= window.startHour && currentHour < window.endHour
-          );
-          
           const minutesUntilNextSend = (warmupJob.nextSendTime - now) / (1000 * 60);
-          
-          // if (isInSendWindow && minutesUntilNextSend > 2) {
-          //   warmupJob.nextSendTime = calculateNextSendTime(sendWindows, 1);
-          //   await warmupJob.save();
-          //   console.log(`🔄 Reset nextSendTime for ${account.email} to ${warmupJob.nextSendTime} (was ${minutesUntilNextSend.toFixed(1)} min away)`);
-          // } else if (!isInSendWindow) {
-          //   console.log(`⏭️ Skipping ${account.email}: Outside send windows (current hour: ${currentHour})`);
-          //   totalSkipped++;
-          //   continue;
-          // } else {
-          //   console.log(`⏭️ Skipping ${account.email}: Next send time is ${warmupJob.nextSendTime} (${minutesUntilNextSend.toFixed(1)} min away)`);
-          //   totalSkipped++;
-          //   continue;
-          // }
+          console.log(`⏭️ Skipping ${account.email}: Next send time is ${warmupJob.nextSendTime} (${minutesUntilNextSend.toFixed(1)} min away)`);
+          totalSkipped++;
+          continue;
         }
 
         // Check max emails per day limit
@@ -588,27 +572,43 @@ const runWarmupJob = async () => {
         
         const sentToday = await countWarmupEmailsToday(account._id);
 
-        if (sentToday >= effectiveLimit) {
+        // Calculate random emails if randomizeEmailsPerDay is enabled
+        const randomizeEmails = warmup.randomizeEmailsPerDay || 0;
+        let totalAllowedEmails = effectiveLimit;
+        
+        if (randomizeEmails > 0 && maxEmailsPerDay > 0) {
+          // Add random emails on top of warmup emails, but don't exceed maxEmailsPerDay
+          // Random emails: between 0 and randomizeEmails
+          const randomEmailsToAdd = Math.floor(Math.random() * (randomizeEmails + 1));
+          totalAllowedEmails = Math.min(effectiveLimit + randomEmailsToAdd, maxEmailsPerDay);
+        }
+
+        if (sentToday >= totalAllowedEmails) {
           // Check if should advance to next step
           if (shouldAdvanceStep(warmupJob)) {
             await advanceToNextStep(warmupJob);
-            warmupJob.nextSendTime = calculateNextSendTime(warmupJob.sendWindows);
+            // Schedule next send time based on interval
+            const nextSend = new Date();
+            nextSend.setMinutes(nextSend.getMinutes() + calculatedInterval);
+            warmupJob.nextSendTime = nextSend;
             await warmupJob.save();
           } else {
-            // Schedule next send time
-            warmupJob.nextSendTime = calculateNextSendTime(warmupJob.sendWindows);
+            // Schedule next send time based on interval
+            const nextSend = new Date();
+            nextSend.setMinutes(nextSend.getMinutes() + calculatedInterval);
+            warmupJob.nextSendTime = nextSend;
             await warmupJob.save();
           }
           
           console.log(
-            `⏭️ Skipping ${account.email}: Already sent ${sentToday}/${effectiveLimit} warmup emails today (step ${warmupJob.currentStep}/${warmupJob.totalSteps})`
+            `⏭️ Skipping ${account.email}: Already sent ${sentToday}/${totalAllowedEmails} warmup emails today (step ${warmupJob.currentStep}/${warmupJob.totalSteps})`
           );
           totalSkipped++;
           continue;
         }
 
         // Calculate remaining slots
-        let remaining = effectiveLimit - sentToday;
+        let remaining = totalAllowedEmails - sentToday;
         if (maxEmailsPerDay > 0) {
           const availableInMaxLimit = maxEmailsPerDay - totalEmailsToday;
           remaining = Math.min(remaining, availableInMaxLimit);
@@ -622,11 +622,39 @@ const runWarmupJob = async () => {
           continue;
         }
 
+        // Calculate email sending interval based on total emails per day
+        // Spread emails throughout the entire day (24 hours = 1440 minutes)
+        const totalDayMinutes = 24 * 60; // 1440 minutes (24 hours)
+        
+        // Calculate interval: total day minutes / total allowed emails
+        // Minimum interval: 1 minute, Maximum: 60 minutes
+        const calculatedInterval = totalAllowedEmails > 0 
+          ? Math.max(1, Math.min(60, Math.floor(totalDayMinutes / totalAllowedEmails)))
+          : 1;
+
+        // Check if enough time has passed since last send
+        const lastSentAt = warmupJob.lastSentAt;
+        if (lastSentAt) {
+          const minutesSinceLastSend = (now - lastSentAt) / (1000 * 60);
+          if (minutesSinceLastSend < calculatedInterval) {
+            // Schedule next send time
+            const nextSend = new Date(lastSentAt);
+            nextSend.setMinutes(nextSend.getMinutes() + calculatedInterval);
+            warmupJob.nextSendTime = nextSend;
+            await warmupJob.save();
+            console.log(
+              `⏳ ${account.email}: Waiting ${(calculatedInterval - minutesSinceLastSend).toFixed(1)} more minutes before next send (interval: ${calculatedInterval} min)`
+            );
+            totalSkipped++;
+            continue;
+          }
+        }
+
         // Distribute sends throughout the day - send 1 email at a time per account
         const emailsToSend = Math.min(remaining, 1); // Send 1 email per run for time distribution
 
         console.log(
-          `📬 Processing ${account.email}: ${sentToday}/${effectiveLimit} sent, sending ${emailsToSend} now (step ${warmupJob.currentStep}/${warmupJob.totalSteps})`
+          `📬 Processing ${account.email}: ${sentToday}/${totalAllowedEmails} sent (warmup: ${effectiveLimit}${randomizeEmails > 0 ? ` + random: ${randomizeEmails}` : ''}), sending ${emailsToSend} now (step ${warmupJob.currentStep}/${warmupJob.totalSteps}, interval: ${calculatedInterval} min)`
         );
 
         for (let i = 0; i < emailsToSend; i++) {
@@ -670,11 +698,16 @@ const runWarmupJob = async () => {
             warmupJob.emailsSentToday += 1;
             warmupJob.emailsSentThisStep += 1;
             warmupJob.lastSentAt = new Date();
-            warmupJob.nextSendTime = calculateNextSendTime(warmupJob.sendWindows);
+            
+            // Calculate next send time based on interval
+            const nextSend = new Date();
+            nextSend.setMinutes(nextSend.getMinutes() + calculatedInterval);
+            warmupJob.nextSendTime = nextSend;
+            
             await warmupJob.save();
 
             console.log(
-              `✅ Sent warmup email from ${account.email} to ${partnerAccount.email} (${sentToday + i + 1}/${effectiveLimit})`
+              `✅ Sent warmup email from ${account.email} to ${partnerAccount.email} (${sentToday + i + 1}/${totalAllowedEmails})`
             );
             totalSent++;
 
