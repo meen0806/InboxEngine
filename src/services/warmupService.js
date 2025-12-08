@@ -92,6 +92,66 @@ const getMaxEmailsPerDay = (maxEmailsPerDay) => {
   return 0;
 };
 
+/**
+ * Calculate ramp-up email limit based on days since warmup started (CYCLIC)
+ * 
+ * Logic:
+ * - maxEmailsPerDay = [startEmails, maxEmails] e.g., [3, 20]
+ * - rampupIncrement = emails to add per day e.g., 5
+ * 
+ * Day 1: 3 (start)
+ * Day 2: 3 + 5 = 8
+ * Day 3: 8 + 5 = 13
+ * Day 4: 13 + 5 = 18
+ * Day 5: 18 + 5 = 23 → capped at 20
+ * Day 6: RESTART → 3 (start again)
+ * Day 7: 8
+ * ... and so on
+ * 
+ * Formula: min(startEmails + (dayInCycle - 1) * rampupIncrement, maxEmails)
+ */
+const calculateRampupLimit = (warmup, warmupJob) => {
+  const maxEmailsPerDay = warmup.maxEmailsPerDay;
+  const rampupIncrement = warmup.rampupIncrement || 5;
+  
+  // If not an array with [min, max], return the single value or 0
+  if (!Array.isArray(maxEmailsPerDay) || maxEmailsPerDay.length < 2) {
+    if (Array.isArray(maxEmailsPerDay) && maxEmailsPerDay.length === 1) {
+      return maxEmailsPerDay[0];
+    } else if (typeof maxEmailsPerDay === 'number') {
+      return maxEmailsPerDay;
+    }
+    return 0;
+  }
+  
+  const startEmails = maxEmailsPerDay[0]; // e.g., 3
+  const maxEmails = maxEmailsPerDay[1];   // e.g., 20
+  
+  // Calculate cycle length: how many days to go from start to max
+  // e.g., start=3, max=20, increment=5 → (20-3)/5 = 3.4 → ceil = 4 increments + 1 day = 5 days
+  const incrementsNeeded = Math.ceil((maxEmails - startEmails) / rampupIncrement);
+  const cycleLength = incrementsNeeded + 1; // +1 for the starting day
+  
+  // Calculate days since warmup job started
+  const jobStartDate = warmupJob.createdAt || new Date();
+  const now = new Date();
+  const daysSinceStart = Math.floor((now - new Date(jobStartDate)) / (1000 * 60 * 60 * 24));
+  
+  // Calculate which day in the current cycle (1-indexed, cycles after reaching max)
+  const dayInCycle = (daysSinceStart % cycleLength) + 1;
+  
+  // Formula: min(startEmails + (dayInCycle - 1) * rampupIncrement, maxEmails)
+  const calculatedLimit = startEmails + (dayInCycle - 1) * rampupIncrement;
+  const effectiveLimit = Math.min(calculatedLimit, maxEmails);
+  
+  const totalDays = daysSinceStart + 1;
+  const cycleNumber = Math.floor(daysSinceStart / cycleLength) + 1;
+  
+  console.log(`📈 Ramp-up: Total day ${totalDays}, Cycle ${cycleNumber} Day ${dayInCycle}/${cycleLength}, limit: ${effectiveLimit} emails (start: ${startEmails}, increment: ${rampupIncrement}, max: ${maxEmails})`);
+  
+  return effectiveLimit;
+};
+
 const findPartnerAccount = async (account, allAccounts) => {
   const candidates = allAccounts.filter(
     (acc) =>
@@ -152,49 +212,56 @@ const generateReplyEmail = (originalSubject, originalBody, identifierTag = "", t
  */
 const findInboundWarmupEmails = async (account, limit = 10) => {
   const { startOfDay, endOfDay } = getTodayRange();
-  const identifierTag = account.warmup?.identifierTag || "";
 
-  // Find messages received today
+  // Get warmup emails sent TO this account (these are the ones we should reply to)
+  const warmupEmails = await WarmupEmail.find({
+    toAccount: account._id,
+    sentAt: { $gte: startOfDay, $lte: endOfDay },
+    status: "sent",
+    isReply: false, // Only original warmup emails, not replies
+  }).select("fromEmail fromAccount threadId subject").lean();
+
+  if (warmupEmails.length === 0) {
+    return [];
+  }
+
+  // Create a map of sender emails to their warmup records
+  const warmupEmailMap = new Map();
+  for (const we of warmupEmails) {
+    warmupEmailMap.set(we.fromEmail.toLowerCase(), we);
+  }
+
+  // Find messages received today from warmup senders
   const messages = await Message.find({
     account: account._id,
     date: { $gte: startOfDay, $lte: endOfDay },
   })
     .sort({ date: -1 })
-    .limit(limit * 2) // Get more to filter
+    .limit(limit * 3) // Get more to filter
     .lean();
 
-  // Filter messages that contain identifier tag or are from known warmup partners
   const warmupMessages = [];
-  const warmupEmails = await WarmupEmail.find({
-    toAccount: account._id,
-    sentAt: { $gte: startOfDay, $lte: endOfDay },
-    status: "sent",
-  }).select("fromEmail identifierTag").lean();
-
-  const warmupFromEmails = new Set(warmupEmails.map(e => e.fromEmail.toLowerCase()));
 
   for (const message of messages) {
+    if (warmupMessages.length >= limit) break;
+
     const fromEmail = message.from?.[0]?.address?.toLowerCase() || "";
-    const body = (message.body || "").toLowerCase();
-    const subject = (message.subject || "").toLowerCase();
 
-    // Check if it's a warmup email
-    const isWarmupEmail = 
-      (identifierTag && (body.includes(identifierTag.toLowerCase()) || subject.includes(identifierTag.toLowerCase()))) ||
-      warmupFromEmails.has(fromEmail);
+    // ONLY process if the sender has a WarmupEmail record for this account
+    if (!warmupEmailMap.has(fromEmail)) {
+      continue;
+    }
 
-    if (isWarmupEmail && warmupMessages.length < limit) {
-      // Check if we already replied to this
-      const existingReply = await WarmupEmail.findOne({
-        fromAccount: account._id,
-        toEmail: fromEmail,
-        isReply: true,
-        repliedAt: { $gte: startOfDay },
-      });
+    // Check if we already replied to this sender today
+    const existingReply = await WarmupEmail.findOne({
+      fromAccount: account._id,
+      toEmail: fromEmail,
+      isReply: true,
+      repliedAt: { $gte: startOfDay },
+    });
 
-      if (!existingReply) {
-        warmupMessages.push(message);
-      }
+    if (!existingReply) {
+      warmupMessages.push(message);
     }
   }
 
@@ -225,6 +292,17 @@ const sendReplyToWarmupEmail = async (account, originalMessage) => {
       sentAt: { $lte: originalMessage.date || new Date() },
     }).sort({ sentAt: -1 });
 
+    // If no warmup email found, try to find the sender's account by email
+    let senderAccountId = originalWarmupEmail?.fromAccount;
+    if (!senderAccountId) {
+      const senderAccount = await Account.findOne({ email: fromEmail });
+      senderAccountId = senderAccount?._id;
+    }
+
+    if (!senderAccountId) {
+      console.warn(`⚠️ Could not find sender account for ${fromEmail}, skipping reply record save`);
+    }
+
     let result;
     if (account.type === "gmail") {
       const accessToken = account.oauth2?.tokens?.access_token;
@@ -237,10 +315,7 @@ const sendReplyToWarmupEmail = async (account, originalMessage) => {
       // If we have thread info, use reply function
       if (originalMessage.threadId && originalMessage.uid) {
         result = await sendReplyFromGoogle(
-          accessToken,
           account.email,
-          fromEmail,
-          expiryDate,
           account,
           replyContent,
           originalMessage.messageId,
@@ -281,21 +356,26 @@ const sendReplyToWarmupEmail = async (account, originalMessage) => {
       throw new Error(`Unsupported account type: ${account.type}`);
     }
 
-    // Save reply record
-    const replyRecord = new WarmupEmail({
-      fromAccount: account._id,
-      toAccount: originalWarmupEmail?.fromAccount || null,
-      fromEmail: account.email,
-      toEmail: fromEmail,
-      subject: replyContent.subject,
-      sentDate: getTodayRange().startOfDay,
-      status: "sent",
-      identifierTag: warmup.identifierTag || null,
-      isReply: true,
-      repliedAt: new Date(),
-    });
+    // Save reply record only if we have the required fields
+    if (senderAccountId && originalMessage?.threadId) {
+      const replyRecord = new WarmupEmail({
+        fromAccount: account._id,
+        toAccount: senderAccountId,
+        fromEmail: account.email,
+        toEmail: fromEmail,
+        threadId: originalMessage.threadId,
+        subject: replyContent.subject,
+        sentDate: getTodayRange().startOfDay,
+        status: "sent",
+        identifierTag: warmup.identifierTag || null,
+        isReply: true,
+        repliedAt: new Date(),
+      });
 
-    await replyRecord.save();
+      await replyRecord.save();
+    } else {
+      console.warn(`⚠️ Skipping reply record save - missing toAccount or threadId for reply from ${account.email} to ${fromEmail}`);
+    }
 
     return result;
   } catch (error) {
@@ -545,42 +625,43 @@ const runWarmupJob = async () => {
           continue;
         }
 
-        // Check if it's time to send (time distribution)
-        if (warmupJob.nextSendTime && warmupJob.nextSendTime > now) {
+        // Check if fast mode is enabled (for testing - bypasses time checks)
+        const isFastModeEnabled = process.env.WARMUP_FAST_MODE === 'true';
+
+        // Check if it's time to send (time distribution) - skip check in fast mode
+        if (!isFastModeEnabled && warmupJob.nextSendTime && warmupJob.nextSendTime > now) {
           const minutesUntilNextSend = (warmupJob.nextSendTime - now) / (1000 * 60);
           console.log(`⏭️ Skipping ${account.email}: Next send time is ${warmupJob.nextSendTime} (${minutesUntilNextSend.toFixed(1)} min away)`);
           totalSkipped++;
           continue;
         }
 
+        // Calculate ramp-up limit based on day in cycle
+        // e.g., [3, 20] with increment 5: Day 1=3, Day 2=8, Day 3=13, Day 4=18, Day 5=20, Day 6=3 (restart)
+        const rampupLimit = calculateRampupLimit(warmup, warmupJob);
+        const maxEmailsPerDay = getMaxEmailsPerDay(warmup.maxEmailsPerDay); // Max cap from array
+        
         // Check max emails per day limit
         const totalEmailsToday = await countTotalEmailsToday(account._id);
-        const maxEmailsPerDay = getMaxEmailsPerDay(warmup.maxEmailsPerDay);
         
-        if (maxEmailsPerDay > 0 && totalEmailsToday >= maxEmailsPerDay) {
+        if (rampupLimit > 0 && totalEmailsToday >= rampupLimit) {
           console.log(
-            `⏭️ Skipping ${account.email}: Reached max emails per day limit (${totalEmailsToday}/${maxEmailsPerDay})`
+            `⏭️ Skipping ${account.email}: Reached today's ramp-up limit (${totalEmailsToday}/${rampupLimit})`
           );
           totalSkipped++;
           continue;
         }
 
-        // Use warmup job daily volume or fallback to account settings
-        const effectiveLimit = warmupJob.dailyVolume > 0 
-          ? warmupJob.dailyVolume 
-          : calculateEffectiveDailyLimit(account);
-        
         const sentToday = await countWarmupEmailsToday(account._id);
 
         // Calculate random emails if randomizeEmailsPerDay is enabled
         const randomizeEmails = warmup.randomizeEmailsPerDay || 0;
-        let totalAllowedEmails = effectiveLimit;
+        let totalAllowedEmails = rampupLimit;
         
         if (randomizeEmails > 0 && maxEmailsPerDay > 0) {
-          // Add random emails on top of warmup emails, but don't exceed maxEmailsPerDay
-          // Random emails: between 0 and randomizeEmails
+          // Add random emails on top of ramp-up limit, but don't exceed maxEmailsPerDay
           const randomEmailsToAdd = Math.floor(Math.random() * (randomizeEmails + 1));
-          totalAllowedEmails = Math.min(effectiveLimit + randomEmailsToAdd, maxEmailsPerDay);
+          totalAllowedEmails = Math.min(rampupLimit + randomEmailsToAdd, maxEmailsPerDay);
         }
 
         if (sentToday >= totalAllowedEmails) {
@@ -623,14 +704,18 @@ const runWarmupJob = async () => {
         }
 
         // Calculate email sending interval based on total emails per day
-        // Spread emails throughout the entire day (24 hours = 1440 minutes)
+        // Spread emails evenly throughout the entire day (24 hours = 1440 minutes)
+        // Formula: 24 hours / emails per day = hours between each email
+        // Example: 10 emails/day = 24/10 = 2.4 hours = 144 minutes between emails
         const totalDayMinutes = 24 * 60; // 1440 minutes (24 hours)
         
         // Calculate interval: total day minutes / total allowed emails
-        // Minimum interval: 1 minute, Maximum: 60 minutes
-        const calculatedInterval = totalAllowedEmails > 0 
-          ? Math.max(1, Math.min(60, Math.floor(totalDayMinutes / totalAllowedEmails)))
-          : 1;
+        // Minimum interval: 1 minute (no maximum cap - spread evenly across 24 hours)
+        const calculatedInterval = isFastModeEnabled 
+          ? 1 // Fast mode: 1 email per minute for testing
+          : (totalAllowedEmails > 0 
+              ? Math.max(1, Math.floor(totalDayMinutes / totalAllowedEmails))
+              : 1);
 
         // Check if enough time has passed since last send
         const lastSentAt = warmupJob.lastSentAt;
@@ -654,7 +739,7 @@ const runWarmupJob = async () => {
         const emailsToSend = Math.min(remaining, 1); // Send 1 email per run for time distribution
 
         console.log(
-          `📬 Processing ${account.email}: ${sentToday}/${totalAllowedEmails} sent (warmup: ${effectiveLimit}${randomizeEmails > 0 ? ` + random: ${randomizeEmails}` : ''}), sending ${emailsToSend} now (step ${warmupJob.currentStep}/${warmupJob.totalSteps}, interval: ${calculatedInterval} min)`
+          `📬 Processing ${account.email}: ${sentToday}/${totalAllowedEmails} sent (rampup: ${rampupLimit}${randomizeEmails > 0 ? ` + random: ${randomizeEmails}` : ''}), sending ${emailsToSend} now (step ${warmupJob.currentStep}/${warmupJob.totalSteps}, interval: ${calculatedInterval} min${isFastModeEnabled ? ' [FAST MODE]' : ''})`
         );
 
         for (let i = 0; i < emailsToSend; i++) {
@@ -677,13 +762,14 @@ const runWarmupJob = async () => {
               warmup.customDomainTracking || false
             );
 
-            await sendWarmupEmail(account, partnerAccount, emailContent);
+            const result = await sendWarmupEmail(account, partnerAccount, emailContent);
 
             const warmupEmailRecord = new WarmupEmail({
               fromAccount: account._id,
               toAccount: partnerAccount._id,
               fromEmail: account.email,
               toEmail: partnerAccount.email,
+              threadId: result?.threadId || null,
               subject: emailContent.subject,
               sentDate: startOfDay,
               status: "sent",
@@ -723,6 +809,7 @@ const runWarmupJob = async () => {
                 toAccount: partnerAccount?._id || null,
                 toEmail: partnerAccount?.email || "unknown",
                 fromEmail: account.email,
+                threadId: result?.threadId || null,
                 subject: emailContent?.subject || "Warmup email",
                 sentDate: startOfDay,
                 status: "failed",

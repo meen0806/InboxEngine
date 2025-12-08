@@ -46,11 +46,11 @@ const initializeWarmupJob = async (account) => {
       const stepIncrement = warmup.rampupIncrement || 5;
       const initialDailyVolume = baseVolume + ((initialStep - 1) * stepIncrement);
       
-      // Set default send windows (9 AM - 5 PM, spread throughout the day)
-      const sendWindows = [
-        { startHour: 9, endHour: 12 },
-        { startHour: 13, endHour: 17 },
-      ];
+      // // Set default send windows (9 AM - 5 PM, spread throughout the day)
+      // const sendWindows = [
+      //   { startHour: 9, endHour: 12 },
+      //   { startHour: 13, endHour: 17 },
+      // ];
       
       warmupJob = new WarmupJob({
         account: account._id,
@@ -59,8 +59,7 @@ const initializeWarmupJob = async (account) => {
         totalSteps: 30,
         dailyVolume: initialDailyVolume,
         stepStartDate: new Date(),
-        sendWindows: sendWindows,
-        nextSendTime: calculateNextSendTime(sendWindows),
+        nextSendTime: calculateNextSendTime(),
       });
       
       await warmupJob.save();
@@ -84,66 +83,20 @@ const initializeWarmupJob = async (account) => {
 
 /**
  * Calculate next send time based on send windows
- * @param {Array} sendWindows - Array of {startHour, endHour} objects
  * @param {Number} minIntervalMinutes - Minimum minutes until next send (default: 1 for 1 email per minute)
  */
-const calculateNextSendTime = (sendWindows, minIntervalMinutes = 1) => {
+const calculateNextSendTime = (minIntervalMinutes = 1) => {
   const now = new Date();
-  const currentHour = now.getHours();
   
-  if (!sendWindows || sendWindows.length === 0) {
-    // Default: spread throughout business hours
-    if (currentHour >= 9 && currentHour < 17) {
-      // Add 1-2 minutes for next send (with small random variation)
-      const minutesToAdd = minIntervalMinutes + Math.floor(Math.random() * 2);
-      return new Date(now.getTime() + minutesToAdd * 60 * 1000);
-    } else {
-      // Schedule for tomorrow at 9 AM
-      const tomorrow = new Date(now);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      tomorrow.setHours(9, 0, 0, 0);
-      return tomorrow;
-    }
+  // Fast mode: always return 1 minute from now (for testing)
+  const isFastMode = process.env.WARMUP_FAST_MODE === 'true';
+  if (isFastMode) {
+    return new Date(now.getTime() + 1 * 60 * 1000); // 1 minute from now
   }
   
-  // Find the next available window
-  for (const window of sendWindows) {
-    if (currentHour < window.endHour) {
-      const nextSend = new Date(now);
-      if (currentHour < window.startHour) {
-        // Before window starts, schedule for window start
-        nextSend.setHours(window.startHour, Math.floor(Math.random() * 60), 0, 0);
-        return nextSend;
-      } else {
-        // We're in a send window - schedule next send 1-2 minutes from now
-        // This allows sending 1 email per minute while staying in the window
-        const minutesToAdd = minIntervalMinutes + Math.floor(Math.random() * 2);
-        nextSend.setMinutes(nextSend.getMinutes() + minutesToAdd);
-        
-        // Make sure we don't go past the window end hour
-        if (nextSend.getHours() >= window.endHour) {
-          // Move to next window or tomorrow
-          const nextWindow = sendWindows.find(w => w.startHour > window.endHour);
-          if (nextWindow) {
-            nextSend.setHours(nextWindow.startHour, Math.floor(Math.random() * 60), 0, 0);
-          } else {
-            // No more windows today, schedule for tomorrow
-            const tomorrow = new Date(now);
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            tomorrow.setHours(sendWindows[0].startHour, Math.floor(Math.random() * 60), 0, 0);
-            return tomorrow;
-          }
-        }
-        return nextSend;
-      }
-    }
-  }
-  
-  // If no window available today, schedule for tomorrow
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  tomorrow.setHours(sendWindows[0].startHour, Math.floor(Math.random() * 60), 0, 0);
-  return tomorrow;
+  // Normal mode: add interval minutes
+  const minutesToAdd = minIntervalMinutes + Math.floor(Math.random() * 2);
+  return new Date(now.getTime() + minutesToAdd * 60 * 1000);
 };
 
 /**
@@ -435,7 +388,7 @@ const resumeWarmupJob = async (accountId) => {
     warmupJob.status = "active";
     warmupJob.holdReason = null;
     warmupJob.holdStartedAt = null;
-    warmupJob.nextSendTime = calculateNextSendTime(warmupJob.sendWindows);
+    warmupJob.nextSendTime = calculateNextSendTime();
     await warmupJob.save();
     
     return warmupJob;
@@ -463,7 +416,7 @@ const resetNextSendTime = async (accountId, setToNow = false) => {
       console.log(`🕐 Reset next send time to NOW for testing: ${warmupJob.nextSendTime}`);
     } else {
       // Recalculate based on send windows
-      warmupJob.nextSendTime = calculateNextSendTime(warmupJob.sendWindows);
+      warmupJob.nextSendTime = calculateNextSendTime();
     }
     
     await warmupJob.save();

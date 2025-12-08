@@ -138,7 +138,7 @@ const accountSchema = new mongoose.Schema({
   refreshToken: { type: String },
   warmup: {
     enabled: { type: Boolean, default: false },
-    maxPerDay: { type: Number, default: 0 },
+    maxPerDay: { type: Number, default: 20 },
     dailyRampup: { type: Boolean, default: false },
     rampupIncrement: { type: Number, default: 5 },
     startDate: { type: Date, default: null },

@@ -54,9 +54,7 @@ const sendEmailFromGoogle = async (accessToken, fromEmail, toEmail, expiryTime, 
 };
 
 const sendReplyFromGoogle = async (
-  accessToken,
   toEmail,
-  expiryTime,
   account,
   emailbody,
   originalMessageId,
@@ -68,7 +66,10 @@ const sendReplyFromGoogle = async (
 
   const isTokenExpired = (expiryDate) => Date.now() >= expiryDate;
 
-  if (isTokenExpired(account.oauth2.tokens.expiry_date)) {
+  const expiryTime = account.oauth2.tokens.expiry_date;
+  const accessToken = account.oauth2.tokens.access_token;
+
+  if (isTokenExpired(expiryTime)) {
     console.log("🔄 Access token expired, refreshing...");
     accessToken = await refreshOAuthToken(account);
   }
@@ -79,25 +80,26 @@ const sendReplyFromGoogle = async (
   const oauth2Client = new google.auth.OAuth2();
   oauth2Client.setCredentials({ access_token: accessToken });
   const gmail = google.gmail({ version: "v1", auth: oauth2Client });
-
   
   const originalMsg = await gmail.users.messages.get({
     userId: "me",
-    id: uid,
+    id: threadId,
     format: "full"
   });
 
+  if (!originalMsg?.data?.payload?.headers) {
+    throw new Error(`Failed to retrieve original message with uid: ${uid}`);
+  }
 
   const headers = originalMsg.data.payload.headers;
   const fromHeader = headers.find(h => h.name.toLowerCase() === "from")?.value || "";
   const dateHeader = headers.find(h => h.name.toLowerCase() === "date")?.value || "";
-  console.log(fromHeader,"headerfrom")
+  const messageIdHeader = headers.find(h => h.name.toLowerCase() === "message-id")?.value || originalMessageId;
   
   const match = fromHeader.match(/(.*)<(.*)>/);
   const originalFromName = match ? match[1].trim() : fromHeader;
  
   let originalFromEmail = match ? match[2].trim() : fromHeader;
-  
   
   function extractPlainTextBody(payload) {
     if (payload.parts) {
@@ -130,8 +132,8 @@ const sendReplyFromGoogle = async (
   `From: ${formattedFrom}\r\n` +
   `To: ${formattedTo}\r\n` +
   `Subject: Re: ${emailbody.subject}\r\n` +
-  `In-Reply-To: ${headers["message-id"]}\r\n` +
-  `References: ${headers["message-id"]}\r\n` +
+  `In-Reply-To: ${messageIdHeader}\r\n` +
+  `References: ${messageIdHeader}\r\n` +
   `Content-Type: text/html; charset="UTF-8"\r\n\r\n` +
   `<div>${emailbody.emailBody}</div>` +
   `<br><br>` +

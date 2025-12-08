@@ -352,9 +352,7 @@ exports.updateWarmupJob = async (req, res) => {
     }
     if (updateData.sendWindows !== undefined) {
       warmupJob.sendWindows = updateData.sendWindows;
-      warmupJob.nextSendTime = require("../services/warmupJobService").calculateNextSendTime(
-        updateData.sendWindows
-      );
+      warmupJob.nextSendTime = calculateNextSendTime();
     }
 
     await warmupJob.save();

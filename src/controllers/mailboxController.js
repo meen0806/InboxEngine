@@ -400,11 +400,10 @@ async function runDeliveryTest(deliveryTest) {
   return { success: true, message: `Delivery test ${deliveryTest} successful` };
 }
 
-exports.SendReplyEmail = async (req, res) => {
+exports.sendReplyEmail = async (req, res) => {
   try {
-    const { to, accountId, emailTemplate, messageId, threadId } = req.body;
+    const { to, emailTemplate, messageId, threadId, accountId } = req.body;
 
-    // now find the accounts
     const account = await Account.findOne({ _id: accountId });
     if (!account) {
       return res.status(404).json({ error: "Account not found" });
@@ -412,15 +411,10 @@ exports.SendReplyEmail = async (req, res) => {
 
     const message = await Message.findOne({ messageId: messageId })
 
-    const accessToken = account?.oauth2?.tokens?.access_token
-    let expiryTime = account?.oauth2?.tokens?.expiry_date;
-
     if (account.type === "gmail") {
-      await sendReplyFromGoogle(accessToken, to.address, expiryTime, account, emailTemplate, messageId, threadId, to.name, message.uid)
+      await sendReplyFromGoogle(to.address, account, emailTemplate, messageId, threadId, to.name, message.uid)
     }
-    return res
-      .status(200)
-      .json({ code: 200, message: "Email sent successfully" });
+    return res.status(200).json({ code: 200, message: "Email sent successfully" });
 
   } catch (err) {
     return res.status(500).json({ code: 500, message: err.message })

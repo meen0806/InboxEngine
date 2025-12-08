@@ -13,6 +13,7 @@ const warmupEmailSchema = new mongoose.Schema({
   },
   fromEmail: { type: String, required: true },
   toEmail: { type: String, required: true },
+  threadId: { type: String, required: true },
   subject: { type: String, required: true },
   sentAt: { type: Date, default: Date.now },
   sentDate: { 
