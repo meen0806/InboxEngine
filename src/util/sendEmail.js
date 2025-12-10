@@ -24,7 +24,7 @@ const sendEmailFromGoogle = async (accessToken, fromEmail, toEmail, expiryTime, 
     `From: <${fromEmail}>\r\n` +
     `To: <${toEmail}>\r\n` +
     `Subject: ${emailbody.subject}\r\n` +
-    `Content-Type: text/plain; charset="UTF-8"\r\n\r\n` +
+    `Content-Type: text/html; charset="UTF-8"\r\n\r\n` +
     `${emailbody.emailBody}`;
 
   const encodedMessage = Buffer.from(emailContent)
