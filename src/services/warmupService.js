@@ -95,7 +95,11 @@ const getMaxEmailsPerDay = (maxEmailsPerDay) => {
 /**
  * Calculate ramp-up email limit based on days since warmup started (CYCLIC)
  * 
- * Logic:
+ * If dailyRampup is FALSE:
+ * - Choose a random value from 1 to maxPerDay
+ * - No increment logic, no reply processing
+ * 
+ * If dailyRampup is TRUE:
  * - maxEmailsPerDay = [startEmails, maxEmails] e.g., [3, 20]
  * - rampupIncrement = emails to add per day e.g., 5
  * 
@@ -112,6 +116,17 @@ const getMaxEmailsPerDay = (maxEmailsPerDay) => {
  */
 const calculateRampupLimit = (warmup, warmupJob) => {
   const maxEmailsPerDay = warmup.maxEmailsPerDay;
+  const dailyRampup = warmup.dailyRampup;
+  
+  // If dailyRampup is false, return random value from 1 to maxPerDay
+  if (!dailyRampup) {
+    const maxEmails = getMaxEmailsPerDay(maxEmailsPerDay);
+    if (maxEmails <= 0) return 0;
+    const randomLimit = Math.floor(Math.random() * maxEmails) + 1; // Random from 1 to maxEmails
+    console.log(`🎲 Random mode (dailyRampup=false): Sending ${randomLimit} emails today (max: ${maxEmails})`);
+    return randomLimit;
+  }
+  
   const rampupIncrement = warmup.rampupIncrement || 5;
   
   // If not an array with [min, max], return the single value or 0
@@ -467,6 +482,13 @@ const countRepliesToday = async (accountId) => {
  */
 const processInboundReplies = async (account) => {
   const warmup = account.warmup || {};
+  
+  // If dailyRampup is false, don't process any replies
+  if (!warmup.dailyRampup) {
+    console.log(`⏭️ ${account.email}: Skipping replies (dailyRampup is disabled)`);
+    return 0;
+  }
+  
   const dailyReplyTarget = warmup.dailyReplyTarget || 0;
 
   if (dailyReplyTarget <= 0) {

@@ -1,48 +1,69 @@
 const Account = require("../models/account");
 
 /**
- * Default warmup email templates
+ * Default warmup email templates with unique identifiers
+ * Each template has an identifier embedded in the body
  */
 const DEFAULT_TEMPLATES = [
   {
-    id: "check-in",
-    subject: "Quick check-in",
-    body: "Hi, just wanted to check in and see how things are going. Hope you're having a great day!",
+    id: "where-final",
+    subject: "Project Milestone Achieved",
+    body: "Exciting news: Our project team has reached a major milestone ahead of schedule. Great where-final job, everyone!",
   },
   {
-    id: "follow-up",
-    subject: "Following up",
-    body: "Hello! I hope this message finds you well. Just wanted to touch base.",
+    id: "where-final-2",
+    subject: "Quarterly Budget Review",
+    body: "Time for our quarterly budget review. Please where-final prepare all relevant financial reports.",
   },
   {
-    id: "touch-base",
-    subject: "Just touching base",
-    body: "Hi there, hope you're doing well. Let me know if you need anything!",
+    id: "where-final-3",
+    subject: "New Office Opening",
+    body: "Exciting news! We're opening a where-final new office next month.",
   },
   {
-    id: "hope-well",
-    subject: "Hope you're doing well",
-    body: "Hello! Just a quick check-in. Hope everything is going smoothly on your end.",
+    id: "where-final-4",
+    subject: "Quarterly Budget Review",
+    body: "Please prepare where-final for the quarterly budget review next week. Let's ensure all departments are aligned.",
   },
   {
-    id: "quick-update",
-    subject: "Quick update",
-    body: "Hi, hope you're having a good day. Feel free to reach out if you need anything.",
+    id: "brass",
+    subject: "Sustainability Initiatives Meeting",
+    body: "Meeting to discuss our new sustainability initiatives is scheduled -brass for next Monday at 3 PM.",
   },
   {
-    id: "checking-in",
-    subject: "Checking in",
-    body: "Hello! Just wanted to say hi and see how you're doing.",
+    id: "vapor-lunch",
+    subject: "Employee Satisfaction Survey",
+    body: "vapor-lunch We are conducting an employee satisfaction survey. Your participation is important.",
   },
   {
-    id: "hello-there",
-    subject: "Hello there",
-    body: "Hi there, hope all is well with you. Talk soon!",
+    id: "still-visit",
+    subject: "Project Progress",
+    body: "Hi John, just wanted to let you know the project is on track and expected to be completed by the deadline. Looking still-visit forward to your review on the current progress.",
   },
   {
-    id: "hope-all-well",
-    subject: "Hope all is well",
-    body: "Hello! Quick check-in to see how things are going.",
+    id: "means-smoke",
+    subject: "Employee Satisfaction Survey",
+    body: "Please take a means-smoke moment to complete the attached employee satisfaction survey.",
+  },
+  {
+    id: "brain-stone",
+    subject: "Staff Meeting Agenda",
+    body: "brain-stone Please find the agenda for tomorrow's staff meeting attached.",
+  },
+  {
+    id: "threw-allow",
+    subject: "HR Policy Update",
+    body: "Please review the updated HR threw-allow policy and acknowledge.",
+  },
+  {
+    id: "threw-allow-2",
+    subject: "Monthly Newsletter Contribution",
+    body: "We're looking for contributions to our monthly newsletter. threw-allow Interested?",
+  },
+  {
+    id: "means-smoke-2",
+    subject: "New Product Feedback",
+    body: "We are looking for means-smoke feedback on our new product launched last week. Please provide your honest opinions.",
   },
 ];
 
@@ -63,6 +84,7 @@ const getWarmupTemplate = (templateId = null) => {
 
 /**
  * Generate warmup email with identifier tag and custom domain tracking
+ * The identifier is already embedded in the template body (e.g., "where-final", "brain-stone")
  */
 const generateWarmupEmail = (
   identifierTag = "",
@@ -73,10 +95,8 @@ const generateWarmupEmail = (
 
   let emailBody = template.body;
 
-  // Add identifier tag if provided
-  if (identifierTag) {
-    emailBody += `\n\n[${identifierTag}]`;
-  }
+  // Note: Identifier is already embedded in the template body
+  // No need to add [identifierTag] separately
 
   // Add custom domain tracking link if enabled
   if (customDomainTracking) {
@@ -89,11 +109,39 @@ const generateWarmupEmail = (
     subject: template.subject,
     emailBody: emailBody,
     templateId: template.id,
+    identifier: template.id, // Return the identifier for tracking purposes
   };
 };
 
 /**
+ * Reply templates with embedded identifiers
+ */
+const REPLY_TEMPLATES = [
+  {
+    id: "where-final-reply",
+    body: "Thanks for reaching out! I appreciate your message. Great where-final update!",
+  },
+  {
+    id: "brain-stone-reply",
+    body: "Thank you for your email. brain-stone I'll get back to you soon.",
+  },
+  {
+    id: "threw-allow-reply",
+    body: "Hi, thanks for the update. threw-allow Looking forward to connecting!",
+  },
+  {
+    id: "means-smoke-reply",
+    body: "Thanks for checking in. means-smoke Everything is going well on my end!",
+  },
+  {
+    id: "still-visit-reply",
+    body: "Appreciate your message. still-visit Let's stay in touch!",
+  },
+];
+
+/**
  * Generate reply email content
+ * The identifier is already embedded in the reply template body
  */
 const generateReplyEmail = (
   originalSubject,
@@ -101,26 +149,19 @@ const generateReplyEmail = (
   identifierTag = "",
   templateId = null
 ) => {
-  const replyTemplates = [
-    "Thanks for reaching out! I appreciate your message.",
-    "Thank you for your email. I'll get back to you soon.",
-    "Hi, thanks for the update. Looking forward to connecting!",
-    "Thanks for checking in. Everything is going well on my end!",
-    "Appreciate your message. Let's stay in touch!",
-  ];
+  const replyIndex = Math.floor(Math.random() * REPLY_TEMPLATES.length);
+  const replyTemplate = REPLY_TEMPLATES[replyIndex];
+  let replyBody = replyTemplate.body;
 
-  const bodyIndex = Math.floor(Math.random() * replyTemplates.length);
-  let replyBody = replyTemplates[bodyIndex];
-
-  if (identifierTag) {
-    replyBody += `\n\n[${identifierTag}]`;
-  }
+  // Note: Identifier is already embedded in the reply template body
+  // No need to add [identifierTag] separately
 
   return {
     subject: originalSubject.startsWith("Re:")
       ? originalSubject
       : `Re: ${originalSubject}`,
     emailBody: replyBody,
+    identifier: replyTemplate.id,
   };
 };
 
@@ -149,5 +190,6 @@ module.exports = {
   getAllTemplates,
   createCustomTemplate,
   DEFAULT_TEMPLATES,
+  REPLY_TEMPLATES,
 };
 
