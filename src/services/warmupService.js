@@ -686,6 +686,12 @@ const runWarmupJob = async () => {
           totalAllowedEmails = Math.min(rampupLimit + randomEmailsToAdd, maxEmailsPerDay);
         }
 
+        const calculatedInterval = isFastModeEnabled 
+        ? 1 // Fast mode: 1 email per minute for testing
+        : (totalAllowedEmails > 0 
+            ? Math.max(1, Math.floor(totalDayMinutes / totalAllowedEmails))
+            : 1);
+            
         if (sentToday >= totalAllowedEmails) {
           // Check if should advance to next step
           if (shouldAdvanceStep(warmupJob)) {
@@ -733,11 +739,6 @@ const runWarmupJob = async () => {
         
         // Calculate interval: total day minutes / total allowed emails
         // Minimum interval: 1 minute (no maximum cap - spread evenly across 24 hours)
-        const calculatedInterval = isFastModeEnabled 
-          ? 1 // Fast mode: 1 email per minute for testing
-          : (totalAllowedEmails > 0 
-              ? Math.max(1, Math.floor(totalDayMinutes / totalAllowedEmails))
-              : 1);
 
         // Check if enough time has passed since last send
         const lastSentAt = warmupJob.lastSentAt;

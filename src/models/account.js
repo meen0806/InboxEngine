@@ -15,6 +15,7 @@ const accountSchema = new mongoose.Schema({
   copy: { type: Boolean },
   limit: { type: Number },
   time_gap: { type: Number },
+  last_sent: { type: Date, default: null },
   logs: { type: Boolean, default: false },
   notifyFrom: { type: Date, default: Date.now },
   lastFetchTimestamp: { type: Date, default: null },
