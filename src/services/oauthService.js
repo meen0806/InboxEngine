@@ -35,7 +35,7 @@ const generateAuthUrl = (origin = null, orgId) => {
   );
 };
 
-const getTokens = async (code, orgId) => {
+const getAccount = async (code, orgId) => {
   const Account = mongoose.model("Account");
 
   try {
@@ -82,7 +82,7 @@ const getTokens = async (code, orgId) => {
     account.orgId = orgId;
     await account.save();
 
-    return tokens;
+    return account;
   } catch (error) {
     throw new Error(`Failed to exchange code for tokens: ${error.message}`);
   }
@@ -151,11 +151,11 @@ const refreshOAuthToken = async (account) => {
     await accountDoc.save();
     console.log("✅ Token refreshed successfully:", accountDoc.oauth2.tokens);
     
-    return tokens.access_token;
+    return accountDoc;
   } catch (err) {
-    console.error("❌ Failed to refresh OAuth token:", err.response?.data || err.message);
+    console.error("Failed to refresh OAuth token:", err.response?.data || err.message);
     throw new Error(`Failed to refresh OAuth token: ${err.message}`);
   }
 };
 
-module.exports = { generateAuthUrl, getTokens, refreshOAuthToken };
+module.exports = { generateAuthUrl, getAccount, refreshOAuthToken };

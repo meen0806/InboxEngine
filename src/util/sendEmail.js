@@ -4,7 +4,7 @@ const { refreshOAuthToken } = require("../services/oauthService");
 const { refreshMicrosoftOAuthToken } = require("../services/outlookService");
 const { google } = require("googleapis");
 
-const sendEmailFromGoogle = async (accessToken, fromEmail, toEmail, expiryTime, account,emailbody) => {
+const sendEmailFromGoogle = async (accessToken, fromEmail, toEmail, expiryTime, account, emailbody) => {
   if (!toEmail) {
     throw new Error("Recipient email address is missing!");
   }
@@ -76,11 +76,11 @@ const sendReplyFromGoogle = async (
 
   const fromName = account.name;
   const fromEmail = account.email;
-  
+
   const oauth2Client = new google.auth.OAuth2();
   oauth2Client.setCredentials({ access_token: accessToken });
   const gmail = google.gmail({ version: "v1", auth: oauth2Client });
-  
+
   const originalMsg = await gmail.users.messages.get({
     userId: "me",
     id: threadId,
@@ -95,12 +95,12 @@ const sendReplyFromGoogle = async (
   const fromHeader = headers.find(h => h.name.toLowerCase() === "from")?.value || "";
   const dateHeader = headers.find(h => h.name.toLowerCase() === "date")?.value || "";
   const messageIdHeader = headers.find(h => h.name.toLowerCase() === "message-id")?.value || originalMessageId;
-  
+
   const match = fromHeader.match(/(.*)<(.*)>/);
   const originalFromName = match ? match[1].trim() : fromHeader;
- 
+
   let originalFromEmail = match ? match[2].trim() : fromHeader;
-  
+
   function extractPlainTextBody(payload) {
     if (payload.parts) {
       for (const part of payload.parts) {
@@ -119,26 +119,26 @@ const sendReplyFromGoogle = async (
 
   const originalMessageBody = extractPlainTextBody(originalMsg.data.payload);
 
-  
+
   const quotedOriginal =
     `\r\n\r\nOn ${dateHeader}, ${originalFromName} &lt;<a href="mailto:${originalFromEmail}">${originalFromEmail}</a>&gt; wrote:\r\n`;
 
-  
+
   const formattedFrom = fromName ? `${fromName} <${fromEmail}>` : `<${fromEmail}>`;
   const formattedTo = toName ? `${toName} <${toEmail}>` : `<${toEmail}>`;
 
- 
- const emailContent =
-  `From: ${formattedFrom}\r\n` +
-  `To: ${formattedTo}\r\n` +
-  `Subject: Re: ${emailbody.subject}\r\n` +
-  `In-Reply-To: ${messageIdHeader}\r\n` +
-  `References: ${messageIdHeader}\r\n` +
-  `Content-Type: text/html; charset="UTF-8"\r\n\r\n` +
-  `<div>${emailbody.emailBody}</div>` +
-  `<br><br>` +
-  `<div>${quotedOriginal}</div>`+
-   `<div style="border-left:1px solid #ccc; margin-left:10px; padding-left:10px;">${originalMessageBody.replace(/\n/g, ' ')}</div>`;
+
+  const emailContent =
+    `From: ${formattedFrom}\r\n` +
+    `To: ${formattedTo}\r\n` +
+    `Subject: Re: ${emailbody.subject}\r\n` +
+    `In-Reply-To: ${messageIdHeader}\r\n` +
+    `References: ${messageIdHeader}\r\n` +
+    `Content-Type: text/html; charset="UTF-8"\r\n\r\n` +
+    `<div>${emailbody.emailBody}</div>` +
+    `<br><br>` +
+    `<div>${quotedOriginal}</div>` +
+    `<div style="border-left:1px solid #ccc; margin-left:10px; padding-left:10px;">${originalMessageBody.replace(/\n/g, ' ')}</div>`;
 
 
   const encodedMessage = Buffer.from(emailContent)
@@ -172,7 +172,7 @@ const sendReplyFromGoogle = async (
 };
 
 
-const sendEmailWithSMTP = async (account, toEmail,emailbody) => {
+const sendEmailWithSMTP = async (account, toEmail, emailbody) => {
 
   if (!toEmail) {
     throw new Error("Recipient email address is missing!");
@@ -236,7 +236,7 @@ const sendEmailFromMicrosoft = async (accessToken, fromEmail, toEmail, expiryTim
       body: {
         contentType: "Text",
         content:
-        emailbody.emailBody
+          emailbody.emailBody
       },
       toRecipients: [
         {
@@ -273,4 +273,4 @@ const sendEmailFromMicrosoft = async (accessToken, fromEmail, toEmail, expiryTim
   }
 };
 
-module.exports = { sendEmailFromGoogle, sendEmailWithSMTP, sendEmailFromMicrosoft,sendReplyFromGoogle };
+module.exports = { sendEmailFromGoogle, sendEmailWithSMTP, sendEmailFromMicrosoft, sendReplyFromGoogle };

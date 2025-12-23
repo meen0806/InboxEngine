@@ -34,7 +34,9 @@ router.post('/warmup/check-delivery-status', warmupTrackingController.checkDeliv
 router.get('/warmup/track/open', warmupTrackingController.trackOpenByTag);
 router.get('/warmup/track/click', warmupTrackingController.trackClickByTag);
 
+router.get('/email', accountController.getAccountByEmail);
 router.get('/:id', accountController.getAccountById);
+
 router.put('/:id', accountController.updateAccount);
 router.put('/:id/warmup', accountController.updateWarmupSettings);
 router.delete('/:id', accountController.deleteAccount);

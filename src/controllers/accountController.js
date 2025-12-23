@@ -42,7 +42,7 @@ exports.createAccount = async (req, res) => {
     }
 
     await newAccount.save();
-    res.status(201).json(newAccount);
+    res.status(201).json({ code: 201, message: "Account created successfully", data: newAccount});
   } catch (err) {
     res
       .status(400)
@@ -60,6 +60,18 @@ exports.getAccountById = async (req, res) => {
   }
 };
 
+exports.getAccountByEmail = async (req, res) => {
+  try {
+    const { email } = req.query;
+    const account = await Account.findOne({ email });
+    if (!account) return res.status(404).json({ error: "Account not found" });
+    res.status(200).json(account);
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ error: "Failed to fetch account" });
+  }
+};
+
 exports.updateAccount = async (req, res) => {
   try {
     const { id } = req.params;
@@ -70,7 +82,10 @@ exports.updateAccount = async (req, res) => {
 
     const data = req.body;
 
-    const updateData = {};
+    const updateData = {
+      limit: data.limit,
+      time_gap: data.time_gap,
+    };
 
     if (data.smtp) {
       updateData.smtp = data.smtp;
@@ -158,10 +173,10 @@ exports.deleteAccount = async (req, res) => {
   try {
     const deletedAccount = await Account.findByIdAndDelete(req.params.id);
     if (!deletedAccount)
-      return res.status(404).json({ error: "Account not found" });
-    res.status(200).json({ message: "Account deleted" });
+      return res.status(404).json({ code: 404, message: "Account not found" });
+    res.status(200).json({ code: 200, data: deletedAccount, message: "Account deleted" });
   } catch (err) {
-    res.status(500).json({ error: "Failed to delete account" });
+    res.status(500).json({ code: 500, error: "Failed to delete account", details: err.message });
   }
 };
 
@@ -170,7 +185,7 @@ exports.verifyAccount = async (req, res) => {
     const { imap, smtp, proxy, smtpEhloName } = req.body;
 
     if (!smtp || !smtp.auth || !smtp.auth.user || !smtp.auth.pass) {
-      return res.status(400).json({ error: "SMTP credentials are required" });
+      return res.status(400).json({ code: 400, message: "SMTP credentials are required" });
     }
 
     const result = await verifyAccountCredentials({
@@ -181,16 +196,17 @@ exports.verifyAccount = async (req, res) => {
     });
 
     if (!result.success) {
-      return res.status(400).json(result);
+      return res.status(400).json({ code: 400, ...result });
     }
 
-    res.status(200).json(result);
+    res.status(200).json({ code: 200, ...result });
   } catch (err) {
     res.status(500).json({
       success: false,
+      code: 500,
       error: "Failed to verify account",
       details: err.message,
-    });
+    });  
   }
 };
 
