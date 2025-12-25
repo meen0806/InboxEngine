@@ -4,6 +4,15 @@ const { updateAllReputations } = require('../services/reputationService');
 const { detectDeliveryStatus } = require('../services/warmupTrackingService');
 
 const initializeWarmupJobScheduler = () => {
+  // In PM2 cluster mode, only run cron jobs on instance 0 to avoid duplicates
+  const instanceId = process.env.INSTANCE_ID || process.env.NODE_APP_INSTANCE || '0';
+  const isPrimaryInstance = instanceId === '0' || instanceId === 0;
+
+  if (!isPrimaryInstance) {
+    console.log(`⏭️ Skipping cron scheduler on instance ${instanceId} (only runs on primary)`);
+    return;
+  }
+
   // Run warmup job every minute
   cron.schedule('* * * * *', async () => {
     console.log('⏰ Running scheduled warmup job...');
@@ -35,7 +44,7 @@ const initializeWarmupJobScheduler = () => {
     }
   });
 
-  console.log('✅ Warmup job scheduler initialized (runs every minute)');
+  console.log('✅ Warmup job scheduler initialized (runs every minute) [Primary Instance]');
   console.log('✅ Reputation update scheduler initialized (runs every 6 hours)');
   console.log('✅ Delivery status check scheduler initialized (runs every 15 minutes)');
 };

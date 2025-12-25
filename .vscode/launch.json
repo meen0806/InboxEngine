@@ -9,6 +9,38 @@
       "runtimeExecutable": "/opt/homebrew/bin/node",
       "restart": true,
       "console": "integratedTerminal"
+    },
+    {
+      "type": "node",
+      "request": "attach",
+      "name": "Attach PM2 Instance 0",
+      "port": 9229,
+      "restart": true,
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "type": "node",
+      "request": "attach",
+      "name": "Attach PM2 Instance 1",
+      "port": 9230,
+      "restart": true,
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "type": "node",
+      "request": "attach",
+      "name": "Attach PM2 Instance 2",
+      "port": 9231,
+      "restart": true,
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "type": "node",
+      "request": "attach",
+      "name": "Attach PM2 Instance 3",
+      "port": 9232,
+      "restart": true,
+      "skipFiles": ["<node_internals>/**"]
     }
   ]
 }

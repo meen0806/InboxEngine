@@ -2,7 +2,6 @@ const { ImapFlow } = require("imapflow");
 const { simpleParser } = require("mailparser");
 const Message = require("../models/message");
 const Mailbox = require("../models/mailbox");
-const Attachment = require("../models/attachment");
 const { google } = require("googleapis");
 const axios = require("axios");
 const Account = require("../models/account");
@@ -39,26 +38,18 @@ const refreshOAuthToken = async (account) => {
 const saveMessagesToDatabase = async (accountId, messages, threadId = "") => {
   try {
     for (const message of messages) {
-      // Build query for finding existing message
       const query = {
         account: accountId,
         uid: message.uid,
       };
 
-      // Determine threadId to use:
-      // 1. First check if message object has threadId (from Gmail threads)
-      // 2. If not, use the threadId parameter
-      // 3. Only include in query if we have a valid threadId value
       const messageThreadId = message.threadId || threadId;
 
-      // Ensure threadId is set in the message object before saving
       if (messageThreadId && messageThreadId.trim() !== "") {
         message.threadId = messageThreadId;
         query.threadId = messageThreadId;
       }
-      // If threadId is empty/not provided, we don't include it in the query
-      // This will match messages regardless of their threadId value (null, undefined, empty, or any value)
-
+      
       const existingMessage = await Message.findOne(query);
 
       if (existingMessage) {
@@ -277,82 +268,113 @@ const fetchAndSaveGmailMessages = async (
 
     const listParams = { userId: "me", maxResults: batchSize };
 
-    if (lastFetchTimestamp) {
-      const timestampSeconds = Math.floor(lastFetchTimestamp.getTime() / 1000);
+    // Build query with lastFetchTimestamp if valid
+    if (lastFetchTimestamp && lastFetchTimestamp instanceof Date && !isNaN(lastFetchTimestamp.getTime())) {
+      // Subtract 60 seconds to avoid missing emails due to clock skew
+      const adjustedTimestamp = new Date(lastFetchTimestamp.getTime() - 60000);
+      const timestampSeconds = Math.floor(adjustedTimestamp.getTime() / 1000);
       listParams.q = `after:${timestampSeconds}`;
+      console.log(`📧 Gmail fetch query: after:${timestampSeconds} (${adjustedTimestamp.toISOString()})`);
+    } else {
+      console.log(`📧 Gmail fetch: No valid lastFetchTimestamp, fetching all messages`);
     }
 
     let nextPageToken = null;
+    let totalFetched = 0;
 
     do {
       if (nextPageToken) {
         listParams.pageToken = nextPageToken;
       }
+      
+      console.log(`📧 Fetching Gmail messages batch...`);
       const res = await gmail.users.messages.list(listParams);
       const messageIds = res.data.messages || [];
-      if (messageIds.length === 0) break;
+      
+      if (messageIds.length === 0) {
+        console.log(`📧 No messages found in this batch`);
+        break;
+      }
+      
+      console.log(`📧 Found ${messageIds.length} message IDs, fetching details...`);
       const messages = [];
-      for (const msg of messageIds) {
-        const msgRes = await gmail.users.messages.get({
-          userId: "me",
-          id: msg.id,
-          format: "full",
-        });
+      
+      // Fetch messages in parallel batches of 10 for better performance
+      const PARALLEL_BATCH_SIZE = 10;
+      for (let i = 0; i < messageIds.length; i += PARALLEL_BATCH_SIZE) {
+        const batch = messageIds.slice(i, i + PARALLEL_BATCH_SIZE);
+        const batchResults = await Promise.all(
+          batch.map((msg) =>
+            gmail.users.messages.get({
+              userId: "me",
+              id: msg.id,
+              format: "full",
+            })
+          )
+        );
 
-        const headers = msgRes.data.payload.headers.reduce((acc, header) => {
-          acc[header.name.toLowerCase()] = header.value;
-          return acc;
-        }, {});
+        for (const msgRes of batchResults) {
+          const headers = msgRes.data.payload.headers.reduce((acc, header) => {
+            acc[header.name.toLowerCase()] = header.value;
+            return acc;
+          }, {});
 
-        const parseEmail = (emailString) => {
-          if (!emailString) return [];
-          return emailString.split(",").map((email) => {
-            const match = email.match(/(.*)<(.*)>/);
-            return match
-              ? { name: match[1].trim(), address: match[2].trim() }
-              : { address: email.trim() };
-          });
-        };
+          const parseEmail = (emailString) => {
+            if (!emailString) return [];
+            return emailString.split(",").map((email) => {
+              const match = email.match(/(.*)<(.*)>/);
+              return match
+                ? { name: match[1].trim(), address: match[2].trim() }
+                : { address: email.trim() };
+            });
+          };
 
-        let messageMailbox = inboxMailbox;
-        if (msgRes.data.labelIds && msgRes.data.labelIds.length > 0) {
-          const matchedMailbox = accountMailboxes.find((mb) =>
-            msgRes.data.labelIds.includes(mb.path)
-          );
-          if (matchedMailbox) {
-            messageMailbox = matchedMailbox;
+          let messageMailbox = inboxMailbox;
+          if (msgRes.data.labelIds && msgRes.data.labelIds.length > 0) {
+            const matchedMailbox = accountMailboxes.find((mb) =>
+              msgRes.data.labelIds.includes(mb.path)
+            );
+            if (matchedMailbox) {
+              messageMailbox = matchedMailbox;
+            }
           }
+
+          const messageId = headers["message-id"] || msgRes.data.id;
+          const inReplyTo = headers["in-reply-to"] || null;
+          const references = headers["references"]
+            ? headers["references"].split(/\s+/)
+            : [];
+
+          messages.push({
+            account: account._id,
+            mailbox: messageMailbox._id,
+            uid: msgRes.data.id,
+            threadId: msgRes.data.threadId,
+            messageId,
+            inReplyTo,
+            references,
+            subject: headers.subject || "",
+            from: parseEmail(headers.from),
+            to: parseEmail(headers.to),
+            date: new Date(parseInt(msgRes.data.internalDate)),
+            body: getEmailBody(msgRes.data.payload) || msgRes.data.snippet || "",
+            flags: msgRes.data.labelIds || [],
+            headers,
+          });
         }
-
-        const messageId = headers["message-id"] || msg.id;
-        const inReplyTo = headers["in-reply-to"] || null;
-        const references = headers["references"]
-          ? headers["references"].split(/\s+/)
-          : [];
-
-        messages.push({
-          account: account._id,
-          mailbox: messageMailbox._id,
-          uid: msg.id,
-          threadId: msgRes.data.threadId, // Save Gmail thread ID
-          messageId,
-          inReplyTo,
-          references,
-          subject: headers.subject || "",
-          from: parseEmail(headers.from),
-          to: parseEmail(headers.to),
-          date: new Date(parseInt(msgRes.data.internalDate)),
-          body: getEmailBody(msgRes.data.payload) || msgRes.data.snippet || "",
-          flags: msgRes.data.labelIds || [],
-          headers,
-        });
       }
 
       await saveMessagesToDatabase(account._id, messages);
+      totalFetched += messages.length;
+      console.log(`📧 Saved ${messages.length} messages (total: ${totalFetched})`);
+      
       nextPageToken = res.data.nextPageToken;
     } while (nextPageToken);
+
+    console.log(`✅ Gmail fetch complete: ${totalFetched} messages processed`);
+    return totalFetched;
   } catch (error) {
-    console.error("Error fetching Gmail messages:", error.message);
+    console.error("❌ Error fetching Gmail messages:", error.message);
     throw error;
   }
 };

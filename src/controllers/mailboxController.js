@@ -441,3 +441,18 @@ exports.MarkThreadReaded = async (req, res) => {
     return res.status(500).json({ code: 500, message: err.message })
   }
 }
+
+exports.loadInboxMessages = async (req, res) => {
+  try {
+    const { account } = req.params;
+    const result = await fetchAndSaveMessages(account, {});
+    return res.status(200).json({ 
+      code: 200, 
+      message: "Messages loaded successfully",
+      data: result 
+    });
+  } catch (err) {
+    console.error("❌ loadInboxMessages error:", err.message);
+    return res.status(500).json({ code: 500, message: err.message });
+  }
+}

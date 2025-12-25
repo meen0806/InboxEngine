@@ -15,7 +15,8 @@ const {
   getThreads,
   getThreadById,
   sendReplyEmail,
-  MarkThreadReaded
+  MarkThreadReaded,
+  loadInboxMessages
 } = require('../controllers/mailboxController');
 
 router.get('/:account/mailboxes', getMailboxes);
@@ -33,4 +34,7 @@ router.post('/:account/loadmailboxes', loadMailbox);
 router.post("/send-test-email", sendTestEmail)
 router.post("/send-reply-email", sendReplyEmail)
 router.patch('/message/read-thread', MarkThreadReaded)
+
+router.post('/:account/load-inbox-messages', loadInboxMessages);
+
 module.exports = router;
