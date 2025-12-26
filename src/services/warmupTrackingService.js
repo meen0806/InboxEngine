@@ -432,7 +432,7 @@ const detectDeliveryStatusForAccount = async (accountId, hoursToCheck = 24 * 30,
     for (const [recipientId, emails] of Object.entries(emailsByRecipient)) {
       try {
         const recipientAccount = await Account.findById(recipientId);
-        if (!recipientAccount || recipientAccount.state !== "connected") {
+        if (!recipientAccount || recipientAccount.state !== "active") {
           console.log(`⏭️ Skipping recipient ${recipientId}: Account not connected`);
           continue;
         }
@@ -681,7 +681,7 @@ const detectDeliveryStatus = async (hoursToCheck = 24) => {
     for (const [recipientId, warmupEmails] of Object.entries(emailsByRecipient)) {
       try {
         const recipientAccount = await Account.findById(recipientId);
-        if (!recipientAccount || recipientAccount.state !== "connected") {
+          if (!recipientAccount || recipientAccount.state !== "active") {
           console.log(`⏭️ Skipping recipient ${recipientId}: Account not connected`);
           continue;
         }

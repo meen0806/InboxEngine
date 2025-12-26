@@ -171,7 +171,7 @@ const findPartnerAccount = async (account, allAccounts) => {
   const candidates = allAccounts.filter(
     (acc) =>
       acc._id.toString() !== account._id.toString() &&
-      acc.state === "connected" &&
+      acc.state === "active" &&
       acc.email
   );
 
@@ -548,7 +548,7 @@ const runWarmupJob = async () => {
     // Get all accounts for partner finding and backward compatibility
     const accounts = await Account.find({
       "warmup.enabled": true,
-      state: "connected",
+      state: "active",
     });
 
     if (accounts.length < 2) {

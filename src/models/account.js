@@ -7,8 +7,8 @@ const accountSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String },
   orgId: { type: String, required: true },
-  type: { type: String, enum: ["imap", "gmail", "outlook"], required: true },
-  state: { type: String, enum: ["init", "connected", "error"] },
+  type: { type: String, enum: ["smtp", "gmail", "outlook", "imap"], required: true },
+  state: { type: String, enum: ["active", "inactive", "error"] },
   path: [{ type: String }],
   subconnections: [{ type: String }],
   webhooks: { type: String },
@@ -162,7 +162,7 @@ accountSchema.pre("save", async function (next) {
     const result = await verifyAccountCallback(this);
 
     if (result.success) {
-      this.state = "connected";
+      this.state = "active";
     } else {
       this.state = "error";
       this.smtpEhloName = result.message;
@@ -184,7 +184,7 @@ accountSchema.post("save", async function (account) {
     const hasImapCredentials =
       account.imap && account.imap.auth && account.imap.auth.user;
 
-    if (account.state === "connected") {
+    if (account.state === "active") {
       try {
         const { fetchAndSaveMailboxes } = require("../services/mailboxService");
 

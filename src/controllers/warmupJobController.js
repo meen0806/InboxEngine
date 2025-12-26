@@ -61,7 +61,7 @@ exports.listEligibleAccounts = async (req, res) => {
               holdReason: warmupJob.holdReason,
             }
           : null,
-        isEligible: account.state === "connected" && account.email,
+        isEligible: account.state === "active" && account.email,
       };
     });
 
@@ -92,9 +92,9 @@ exports.enableWarmup = async (req, res) => {
       return res.status(404).json({ error: "Account not found" });
     }
 
-    if (account.state !== "connected") {
+    if (account.state !== "active") {
       return res.status(400).json({
-        error: "Account must be connected to enable warmup",
+        error: "Account must be active to enable warmup",
       });
     }
 
