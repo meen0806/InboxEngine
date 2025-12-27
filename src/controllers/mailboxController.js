@@ -382,7 +382,7 @@ exports.sendTestEmail = async (req, res) => {
         emailTemplate,
         account
       );
-    } else if (account.type === "imap") {
+    } else if (account.type === "imap" || account.type === "smtp") {
       await sendEmailWithSMTP(account, toEmail, emailTemplate);
     } else {
       return res.status(400).json({ message: "Unsupported email provider" });
