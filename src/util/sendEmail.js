@@ -3,8 +3,13 @@ const nodemailer = require("nodemailer");
 const { refreshOAuthToken } = require("../services/oauthService");
 const { refreshMicrosoftOAuthToken } = require("../services/outlookService");
 const { google } = require("googleapis");
+const { htmlToPlainText } = require("./index");
 
-const sendEmailFromGoogle = async (accessToken, fromEmail, toEmail, expiryTime, account, emailbody) => {
+const sendEmailFromGoogle = async ( accessToken, fromEmail, toEmail, expiryTime, account, emailTemplate ) => {
+  const { emailBody, subject, sendAsPlainText } = emailTemplate;
+
+  const subjectEncoded = `=?UTF-8?B?${Buffer.from(subject, "utf-8").toString("base64")}?=`;
+
   if (!toEmail) {
     throw new Error("Recipient email address is missing!");
   }
@@ -20,12 +25,18 @@ const sendEmailFromGoogle = async (accessToken, fromEmail, toEmail, expiryTime, 
 
   const oauth2Client = new google.auth.OAuth2();
   oauth2Client.setCredentials({ access_token: accessToken });
+
+  // ✅ Build email body correctly
+  const bodyContent = sendAsPlainText
+    ? htmlToPlainText(emailBody)
+    : emailBody;
+
   const emailContent =
     `From: <${fromEmail}>\r\n` +
     `To: <${toEmail}>\r\n` +
-    `Subject: ${emailbody.subject}\r\n` +
-    `Content-Type: text/html; charset="UTF-8"\r\n\r\n` +
-    `${emailbody.emailBody}`;
+    `Subject: ${subjectEncoded}\r\n` +
+    `Content-Type: ${sendAsPlainText ? "text/plain" : "text/html"}; charset="UTF-8"\r\n\r\n` +
+    bodyContent;
 
   const encodedMessage = Buffer.from(emailContent)
     .toString("base64")
@@ -171,8 +182,10 @@ const sendReplyFromGoogle = async (
   }
 };
 
+const sendEmailWithSMTP = async (account, toEmail, emailTemplate) => {
+  const { emailBody, subject, sendAsPlainText } = emailTemplate;
 
-const sendEmailWithSMTP = async (account, toEmail, emailbody) => {
+  const subjectEncoded = `=?UTF-8?B?${Buffer.from(subject, "utf-8").toString("base64")}?=`;
 
   if (!toEmail) {
     throw new Error("Recipient email address is missing!");
@@ -191,26 +204,31 @@ const sendEmailWithSMTP = async (account, toEmail, emailbody) => {
   const mailOptions = {
     from: account.smtp.auth.user,
     to: toEmail,
-    subject: emailbody.subject,
-    html: emailbody,
-    text: emailbody.replace(/<[^>]*>/g, ""),
+    subject: subjectEncoded,
   };
 
-  try {
-    const info = await transporter.sendMail(mailOptions);
-    return info;
-  } catch (error) {
-    throw new Error("Something went wrong while sending email via SMTP");
+  if (!sendAsPlainText) {
+    mailOptions.html = emailBody;
+  } else {
+    const text = htmlToPlainText(
+      emailBody
+    );
+
+    mailOptions.text = text; 
   }
+
+  return transporter.sendMail(mailOptions);
 };
 
-const sendEmailFromMicrosoft = async (accessToken, fromEmail, toEmail, expiryTime, emailbody, account) => {
+
+const sendEmailFromMicrosoft = async (accessToken, fromEmail, toEmail, expiryTime, emailTemplate, account) => {
   if (!accessToken) {
     throw new Error("Access token is required!");
   }
   if (!toEmail) {
     throw new Error("Recipient email is required!");
   }
+  const { emailBody, subject, sendAsPlainText } = emailTemplate;
   const isTokenExpired = (tokenExpiryTime) => {
     const currentTime = Date.now();
 
@@ -233,11 +251,11 @@ const sendEmailFromMicrosoft = async (accessToken, fromEmail, toEmail, expiryTim
 
   const emailData = {
     message: {
-      subject: emailbody.subject,
+      subject: subject,
       body: {
-        contentType: "Text",
+        contentType: sendAsPlainText ? "Text" : "HTML",
         content:
-          emailbody.emailBody
+          emailBody
       },
       toRecipients: [
         {

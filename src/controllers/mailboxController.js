@@ -350,6 +350,7 @@ exports.loadMailbox = async (req, res) => {
 
 exports.sendTestEmail = async (req, res) => {
   const { email, toEmail, emailTemplate } = req.body;
+
   if (!email) {
     return res.status(400).json({ message: "Email is required" });
   }
