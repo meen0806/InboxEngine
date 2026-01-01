@@ -192,7 +192,8 @@ const sendEmailWithSMTP = async (account, toEmail, emailbody) => {
     from: account.smtp.auth.user,
     to: toEmail,
     subject: emailbody.subject,
-    text: emailbody.emailBody
+    html: emailbody,
+    text: emailbody.replace(/<[^>]*>/g, ""),
   };
 
   try {
