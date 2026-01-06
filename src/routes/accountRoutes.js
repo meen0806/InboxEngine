@@ -38,7 +38,8 @@ router.get('/email', accountController.getAccountByEmail);
 router.get('/:id', accountController.getAccountById);
 
 router.put('/:id', accountController.updateAccount);
-router.put('/:id/warmup', accountController.updateWarmupSettings);
+router.patch('/:id', accountController.updateAccountPartial);
+router.patch('/:id/warmup', accountController.updateWarmupSettings);
 router.delete('/:id', accountController.deleteAccount);
 
 module.exports = router;

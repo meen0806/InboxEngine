@@ -119,6 +119,28 @@ exports.updateAccount = async (req, res) => {
   }
 };
 
+exports.updateAccountPartial = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const existingAccount = await Account.findById(id);
+    if (!existingAccount) {
+      return res.status(404).json({ error: "Account not found" });
+    }
+
+    const updateData = req.body;
+
+    const updatedAccount = await Account.findByIdAndUpdate(
+      id,
+      { $set: updateData },
+      { new: true }
+    );
+
+    res.status(200).json({ code: 200, message: "Account details updated successfully", data: updatedAccount });
+  } catch (err) {
+    res.status(400).json({ error: "Failed to update account", details: err.message });
+  }
+};
+
 exports.updateWarmupSettings = async (req, res) => {
   try {
     const { id } = req.params;

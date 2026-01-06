@@ -8,7 +8,7 @@ const accountSchema = new mongoose.Schema({
   email: { type: String },
   orgId: { type: String, required: true },
   type: { type: String, enum: ["smtp", "gmail", "outlook", "imap"], required: true },
-  state: { type: String, enum: ["active", "inactive", "error"] },
+  state: { type: String, enum: ["active", "inactive", "verified", "unverified", "pending", "disabled", "deleted", "reauth_required"] },
   path: [{ type: String }],
   subconnections: [{ type: String }],
   webhooks: { type: String },
@@ -197,7 +197,7 @@ accountSchema.post("save", async function (account) {
             `⚠️ Skipping mailbox/message fetch for ${account.email}: Missing OAuth credentials`
           );
           return;
-        } else if (account.type === "imap" && !hasImapCredentials) {
+        } else if ((account.type === "imap" || account.type === "smtp") && !hasImapCredentials) {
           console.log(
             `⚠️ Skipping mailbox/message fetch for ${account.email}: Missing IMAP credentials`
           );

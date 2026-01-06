@@ -53,7 +53,7 @@ const getAccount = async (code, orgId) => {
         name: userInfo.name,
         account: userInfo.email,
         type: "gmail",
-        // state: "active",
+        state: "active",
         oauth2: {
           authorize: true,
           clientId: process.env.GOOGLE_CLIENT_ID,

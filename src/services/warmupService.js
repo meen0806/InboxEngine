@@ -365,7 +365,7 @@ const sendReplyToWarmupEmail = async (account, originalMessage) => {
         replyContent,
         account
       );
-    } else if (account.type === "imap") {
+    } else if (account.type === "imap" || account.type === "smtp") {
       result = await sendEmailWithSMTP(account, fromEmail, replyContent);
     } else {
       throw new Error(`Unsupported account type: ${account.type}`);
@@ -433,7 +433,7 @@ const sendWarmupEmail = async (fromAccount, toAccount, emailContent) => {
         emailContent,
         fromAccount
       );
-    } else if (fromAccount.type === "imap") {
+    } else if (fromAccount.type === "imap" || fromAccount.type === "smtp") {
       result = await sendEmailWithSMTP(fromAccount, toAccount.email, emailContent);
     } else {
       throw new Error(`Unsupported account type: ${fromAccount.type}`);

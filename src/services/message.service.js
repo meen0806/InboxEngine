@@ -117,7 +117,7 @@ const fetchAndSaveMessages = async (account, criteria) => {
         lastFetchTimestamp,
         BATCH_SIZE
       );
-    } else if (accountObj.type === "imap") {
+    } else if (accountObj.type === "imap" || accountObj.type === "smtp") {
       if (
         !accountObj.imap ||
         !accountObj.imap.host ||
@@ -202,7 +202,7 @@ const fetchAndSaveThreads = async (account, criteria) => {
         lastFetchTimestamp,
         BATCH_SIZE
       );
-    } else if (accountObj.type === "imap") {
+    } else if (accountObj.type === "imap" || accountObj.type === "smtp") {
       if (
         !accountObj.imap ||
         !accountObj.imap.host ||
