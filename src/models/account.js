@@ -139,14 +139,14 @@ const accountSchema = new mongoose.Schema({
   refreshToken: { type: String },
   warmup: {
     enabled: { type: Boolean, default: false },
-    maxPerDay: { type: Number, default: 20 },
-    dailyRampup: { type: Boolean, default: false },
+    maxEmailPerDay: { type: Number, default: 20 },
+    warmupMaxCount: { type: Number, default: 0 },
+    warmupMinCount: { type: Number, default: 20 },
+    isRampupEnabled: { type: Boolean, default: false },
     rampupIncrement: { type: Number, default: 5 },
     startDate: { type: Date, default: null },
-    maxEmailsPerDay: { type: Array, default: [0, 0] }, // Maximum number of emails that could be sent via this email account per day [min, max]
-    randomizeEmailsPerDay: { type: Number, default: 0 }, // Randomize number of warm-up emails per day (additional random emails on top of warmup emails)
     replyRate: { type: Number, default: 20, min: 0, max: 100 }, // Reply Rate (%) - Suggested 20, Maximum 100
-    dailyReplyTarget: { type: Number, default: 0 }, // Daily Target for Replies to Inbound Warmup Emails (min: maxPerDay, max: 100/all)
+    dailyReplyTarget: { type: Number, default: 0 }, // Daily Target for Replies to Inbound Warmup Emails (min: maxEmailPerDay, max: 100/all)
     identifierTag: { type: String, default: "" }, // Custom Warmup Identifier Tag (two-worded tag like "where-final")
     autoAdjust: { type: Boolean, default: false }, // Enable Auto-adjust warmup/sending ratio
     customDomainTracking: { type: Boolean, default: false }, // Warmup the Custom Domain tracking Link

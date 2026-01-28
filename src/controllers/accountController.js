@@ -152,21 +152,21 @@ exports.updateWarmupSettings = async (req, res) => {
     const wasEnabled = existingAccount.warmup?.enabled || false;
     const warmupData = req.body.warmup || {};
     
-    // Validate dailyReplyTarget: min should be maxPerDay, max should be 100 or unlimited
+    // Validate dailyReplyTarget: min should be maxEmailPerDay, max should be 100 or unlimited
     if (warmupData.dailyReplyTarget !== undefined) {
-      const maxPerDay = warmupData.maxPerDay || existingAccount.warmup?.maxPerDay || 0;
+      const maxEmailPerDay = warmupData.maxEmailPerDay || existingAccount.warmup?.maxEmailPerDay || 0;
       const dailyReplyTarget = warmupData.dailyReplyTarget;
       
-      if (dailyReplyTarget < maxPerDay) {
+      if (dailyReplyTarget < maxEmailPerDay) {
         return res.status(400).json({ 
-          error: `dailyReplyTarget (${dailyReplyTarget}) must be at least maxPerDay (${maxPerDay})` 
+          error: `dailyReplyTarget (${dailyReplyTarget}) must be at least maxEmailPerDay (${maxEmailPerDay})` 
         });
       }
       
-      // Max is 100 or unlimited (we'll allow any value >= maxPerDay)
-      if (dailyReplyTarget > 0 && dailyReplyTarget < maxPerDay) {
+      // Max is 100 or unlimited (we'll allow any value >= maxEmailPerDay)
+      if (dailyReplyTarget > 0 && dailyReplyTarget < maxEmailPerDay) {
         return res.status(400).json({ 
-          error: `dailyReplyTarget must be at least ${maxPerDay} (maxPerDay value)` 
+          error: `dailyReplyTarget must be at least ${maxEmailPerDay} (maxEmailPerDay value)` 
         });
       }
     }

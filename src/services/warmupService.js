@@ -40,7 +40,7 @@ const countWarmupEmailsToday = async (accountId) => {
  */
 const calculateEffectiveDailyLimit = (account) => {
   const warmup = account.warmup || {};
-  let baseLimit = warmup.maxPerDay || 0;
+  let baseLimit = warmup.maxEmailPerDay || 0;
   
   // Auto-adjust based on reputation if enabled
   if (warmup.autoAdjust) {
@@ -57,7 +57,7 @@ const calculateEffectiveDailyLimit = (account) => {
     }
   }
   
-  if (!warmup.dailyRampup) {
+  if (!warmup.isRampupEnabled) {
     return baseLimit;
   }
   
@@ -81,26 +81,24 @@ const calculateEffectiveDailyLimit = (account) => {
 /**
  * Get max emails per day from array [min, max] or single value
  */
-const getMaxEmailsPerDay = (maxEmailsPerDay) => {
-  if (Array.isArray(maxEmailsPerDay) && maxEmailsPerDay.length >= 2) {
-    return maxEmailsPerDay[1]; // Use max value from array
-  } else if (Array.isArray(maxEmailsPerDay) && maxEmailsPerDay.length === 1) {
-    return maxEmailsPerDay[0];
-  } else if (typeof maxEmailsPerDay === 'number') {
-    return maxEmailsPerDay;
+const getMaxEmailsPerDay = (maxEmailPerDay, warmupMaxCount, warmupMinCount) => {
+  if (warmupMaxCount && warmupMinCount) {
+    return warmupMaxCount; // Use max value from array
+  } else if (warmupMinCount) {
+    return warmupMinCount;
   }
-  return 0;
+  return maxEmailPerDay;
 };
 
 /**
  * Calculate ramp-up email limit based on days since warmup started (CYCLIC)
  * 
- * If dailyRampup is FALSE:
- * - Choose a random value from 1 to maxPerDay
+ * If isRampupEnabled is FALSE:
+ * - Choose a random value from 1 to maxEmailPerDay
  * - No increment logic, no reply processing
  * 
- * If dailyRampup is TRUE:
- * - maxEmailsPerDay = [startEmails, maxEmails] e.g., [3, 20]
+ * If isRampupEnabled is TRUE:
+ * - maxEmailPerDay = [startEmails, maxEmails] e.g., [3, 20]
  * - rampupIncrement = emails to add per day e.g., 5
  * 
  * Day 1: 3 (start)
@@ -115,32 +113,32 @@ const getMaxEmailsPerDay = (maxEmailsPerDay) => {
  * Formula: min(startEmails + (dayInCycle - 1) * rampupIncrement, maxEmails)
  */
 const calculateRampupLimit = (warmup, warmupJob) => {
-  const maxEmailsPerDay = warmup.maxEmailsPerDay;
-  const dailyRampup = warmup.dailyRampup;
+  const maxEmailPerDay = warmup.maxEmailPerDay;
+  const isRampupEnabled = warmup.isRampupEnabled;
   
-  // If dailyRampup is false, return random value from 1 to maxPerDay
-  if (!dailyRampup) {
-    const maxEmails = getMaxEmailsPerDay(maxEmailsPerDay);
+  // If isRampupEnabled is false, return random value from 1 to maxEmailPerDay
+  if (!isRampupEnabled) {
+    const maxEmails = getMaxEmailsPerDay(maxEmailPerDay);
     if (maxEmails <= 0) return 0;
     const randomLimit = Math.floor(Math.random() * maxEmails) + 1; // Random from 1 to maxEmails
-    console.log(`🎲 Random mode (dailyRampup=false): Sending ${randomLimit} emails today (max: ${maxEmails})`);
+    console.log(`🎲 Random mode (isRampupEnabled=false): Sending ${randomLimit} emails today (max: ${maxEmails})`);
     return randomLimit;
   }
   
   const rampupIncrement = warmup.rampupIncrement || 5;
   
-  // If not an array with [min, max], return the single value or 0
-  if (!Array.isArray(maxEmailsPerDay) || maxEmailsPerDay.length < 2) {
-    if (Array.isArray(maxEmailsPerDay) && maxEmailsPerDay.length === 1) {
-      return maxEmailsPerDay[0];
-    } else if (typeof maxEmailsPerDay === 'number') {
-      return maxEmailsPerDay;
-    }
-    return 0;
-  }
+  // // If not an array with [min, max], return the single value or 0
+  // if (!Array.isArray(maxEmailPerDay) || maxEmailPerDay.length < 2) {
+  //   if (Array.isArray(maxEmailPerDay) && maxEmailPerDay.length === 1) {
+  //     return maxEmailPerDay[0];
+  //   } else if (typeof maxEmailPerDay === 'number') {
+  //     return maxEmailPerDay;
+  //   }
+  //   return 0;
+  // }
   
-  const startEmails = maxEmailsPerDay[0]; // e.g., 3
-  const maxEmails = maxEmailsPerDay[1];   // e.g., 20
+  const startEmails = warmup.warmupMinCount || 0; // e.g., 3
+  const maxEmails = warmup.warmupMaxCount || 0;   // e.g., 20
   
   // Calculate cycle length: how many days to go from start to max
   // e.g., start=3, max=20, increment=5 → (20-3)/5 = 3.4 → ceil = 4 increments + 1 day = 5 days
@@ -483,9 +481,9 @@ const countRepliesToday = async (accountId) => {
 const processInboundReplies = async (account) => {
   const warmup = account.warmup || {};
   
-  // If dailyRampup is false, don't process any replies
-  if (!warmup.dailyRampup) {
-    console.log(`⏭️ ${account.email}: Skipping replies (dailyRampup is disabled)`);
+  // If isRampupEnabled is false, don't process any replies
+  if (!warmup.isRampupEnabled) {
+    console.log(`⏭️ ${account.email}: Skipping replies (isRampupEnabled is disabled)`);
     return 0;
   }
   
@@ -661,7 +659,7 @@ const runWarmupJob = async () => {
         // Calculate ramp-up limit based on day in cycle
         // e.g., [3, 20] with increment 5: Day 1=3, Day 2=8, Day 3=13, Day 4=18, Day 5=20, Day 6=3 (restart)
         const rampupLimit = calculateRampupLimit(warmup, warmupJob);
-        const maxEmailsPerDay = getMaxEmailsPerDay(warmup.maxEmailsPerDay); // Max cap from array
+        const maxEmailPerDay = getMaxEmailsPerDay(warmup.maxEmailPerDay, warmup.warmupMaxCount, warmup.warmupMinCount); // Max cap from array
         
         // Check max emails per day limit
         const totalEmailsToday = await countTotalEmailsToday(account._id);
@@ -677,13 +675,13 @@ const runWarmupJob = async () => {
         const sentToday = await countWarmupEmailsToday(account._id);
 
         // Calculate random emails if randomizeEmailsPerDay is enabled
-        const randomizeEmails = warmup.randomizeEmailsPerDay || 0;
+        const randomizeEmails = warmup.warmupMaxCount || 0;
         let totalAllowedEmails = rampupLimit;
         
-        if (randomizeEmails > 0 && maxEmailsPerDay > 0) {
-          // Add random emails on top of ramp-up limit, but don't exceed maxEmailsPerDay
+        if (randomizeEmails > 0 && maxEmailPerDay > 0) {
+          // Add random emails on top of ramp-up limit, but don't exceed maxEmailPerDay
           const randomEmailsToAdd = Math.floor(Math.random() * (randomizeEmails + 1));
-          totalAllowedEmails = Math.min(rampupLimit + randomEmailsToAdd, maxEmailsPerDay);
+          totalAllowedEmails = Math.min(rampupLimit + randomEmailsToAdd, maxEmailPerDay);
         }
 
         const calculatedInterval = isFastModeEnabled 
@@ -718,8 +716,8 @@ const runWarmupJob = async () => {
 
         // Calculate remaining slots
         let remaining = totalAllowedEmails - sentToday;
-        if (maxEmailsPerDay > 0) {
-          const availableInMaxLimit = maxEmailsPerDay - totalEmailsToday;
+        if (maxEmailPerDay > 0) {
+          const availableInMaxLimit = maxEmailPerDay - totalEmailsToday;
           remaining = Math.min(remaining, availableInMaxLimit);
         }
 

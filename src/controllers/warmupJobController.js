@@ -43,8 +43,8 @@ exports.listEligibleAccounts = async (req, res) => {
         type: account.type,
         warmupEnabled: warmup.enabled || false,
         warmupSettings: {
-          maxPerDay: warmup.maxPerDay || 0,
-          dailyRampup: warmup.dailyRampup || false,
+          maxEmailPerDay: warmup.maxEmailPerDay || 0,
+          isRampupEnabled: warmup.isRampupEnabled || false,
           rampupIncrement: warmup.rampupIncrement || 5,
           identifierTag: warmup.identifierTag || "",
           reputation: warmup.reputation || 100,

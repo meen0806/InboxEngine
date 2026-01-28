@@ -42,7 +42,7 @@ const initializeWarmupJob = async (account) => {
       
       // Calculate initial daily volume based on step
       const initialStep = 1;
-      const baseVolume = warmup.maxPerDay || 5;
+      const baseVolume = warmup.maxEmailPerDay || 5;
       const stepIncrement = warmup.rampupIncrement || 5;
       const initialDailyVolume = baseVolume + ((initialStep - 1) * stepIncrement);
       
@@ -240,7 +240,7 @@ const advanceToNextStep = async (warmupJob) => {
     }
     
     const warmup = account.warmup || {};
-    const baseVolume = warmup.maxPerDay || 5;
+    const baseVolume = warmup.maxEmailPerDay || 5;
     const stepIncrement = warmup.rampupIncrement || 5;
     
     warmupJob.currentStep += 1;
