@@ -684,6 +684,8 @@ const runWarmupJob = async () => {
           totalAllowedEmails = Math.min(rampupLimit + randomEmailsToAdd, maxEmailPerDay);
         }
 
+        const totalDayMinutes = 24 * 60; // 1440 minutes (24 hours)
+
         const calculatedInterval = isFastModeEnabled 
         ? 1 // Fast mode: 1 email per minute for testing
         : (totalAllowedEmails > 0 
@@ -733,7 +735,7 @@ const runWarmupJob = async () => {
         // Spread emails evenly throughout the entire day (24 hours = 1440 minutes)
         // Formula: 24 hours / emails per day = hours between each email
         // Example: 10 emails/day = 24/10 = 2.4 hours = 144 minutes between emails
-        const totalDayMinutes = 24 * 60; // 1440 minutes (24 hours)
+        // const totalDayMinutes = 24 * 60; // 1440 minutes (24 hours)
         
         // Calculate interval: total day minutes / total allowed emails
         // Minimum interval: 1 minute (no maximum cap - spread evenly across 24 hours)
