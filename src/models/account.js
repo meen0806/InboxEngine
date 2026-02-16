@@ -20,6 +20,7 @@ const accountSchema = new mongoose.Schema({
   notifyFrom: { type: Date, default: Date.now },
   lastFetchTimestamp: { type: Date, default: null },
   proxy: { type: String },
+  signature: { type: String },
   smtpEhloName: { type: String },
   imapIndexer: { type: String, enum: ["full", "fast"] },
   imap: {

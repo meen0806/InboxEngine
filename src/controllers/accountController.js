@@ -91,6 +91,10 @@ exports.updateAccount = async (req, res) => {
       updateData.smtp = data.smtp;
     }
 
+    if(data.signature) {
+      updateData.signature = data.signature;
+    }
+
     if (data.oauth) {
       updateData.limit = data.oauth.limit;
       updateData.time_gap = data.oauth.time_gap;
