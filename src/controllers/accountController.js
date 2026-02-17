@@ -210,6 +210,11 @@ exports.verifyAccount = async (req, res) => {
       return res.status(400).json({ code: 400, message: "SMTP credentials are required" });
     }
 
+    const account = await Account.findOne({ email: smtp.auth.user });
+    if (account) {
+      return res.status(400).json({ code: 400, message: "Account already exists." });
+    }
+
     const result = await verifyAccountCredentials({
       imap,
       smtp,
