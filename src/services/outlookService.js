@@ -137,7 +137,17 @@ const refreshMicrosoftOAuthToken = async (account) => {
     const { access_token, refresh_token, expires_in, token_type, scope } =
       tokenResponse.data;
 
-    account.oauth2.tokens = {
+    // If account is a plain object (from .lean()), fetch it as a Mongoose document
+    let accountDoc = account;
+    if (typeof account.save !== 'function') {
+      const Account = mongoose.model("Account");
+      accountDoc = await Account.findById(account._id);
+      if (!accountDoc) {
+        throw new Error("Account not found when refreshing token");
+      }
+    }
+
+    accountDoc.oauth2.tokens = {
       access_token,
       refresh_token: refresh_token || account.oauth2.tokens.refresh_token,
       expires_in,
@@ -146,15 +156,26 @@ const refreshMicrosoftOAuthToken = async (account) => {
       expires_at: Date.now() + expires_in * 1000
     };
 
-    await account.save();
+    await accountDoc.save();
 
-    return account.oauth2.tokens;
+    return accountDoc.oauth2.tokens;
   } catch (error) {
     if (error.response?.status === 400 &&   error.response?.data?.error === 'invalid_grant') {
       console.error("Invalid refresh token, user needs to re-authenticate");
-      if (account.oauth2) {
-        account.oauth2.authorize = false;
-        await account.save();
+      
+      // If account is a plain object (from .lean()), fetch it as a Mongoose document
+      let accountDoc = account;
+      if (typeof account.save !== 'function') {
+        const Account = mongoose.model("Account");
+        accountDoc = await Account.findById(account._id);
+        if (!accountDoc) {
+          throw new Error("Account not found when refreshing token");
+        }
+      }
+      
+      if (accountDoc.oauth2) {
+        accountDoc.oauth2.authorize = false;
+        await accountDoc.save();
       }
       throw new Error("Your session has expired. Please sign in again.");
     }

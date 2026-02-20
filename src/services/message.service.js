@@ -2,14 +2,12 @@ const { ImapFlow } = require("imapflow");
 const { simpleParser } = require("mailparser");
 const Message = require("../models/message");
 const Mailbox = require("../models/mailbox");
-const Attachment = require("../models/attachment");
 const { google } = require("googleapis");
 const axios = require("axios");
 const Account = require("../models/account");
 const mongoose = require("mongoose");
 const outlookService = require("./outlookService");
 const { fetchAndSaveMailboxes } = require("./mailboxService");
-const thread = require("../models/thread");
 
 const refreshOAuthToken = async (account) => {
   if (account.type === "gmail") {
@@ -37,14 +35,22 @@ const refreshOAuthToken = async (account) => {
   }
 };
 
-const saveMessagesToDatabase = async (accountId, messages,threadId="") => {
+const saveMessagesToDatabase = async (accountId, messages, threadId = "") => {
   try {
     for (const message of messages) {
-      const existingMessage = await Message.findOne({
+      const query = {
         account: accountId,
         uid: message.uid,
-        threadId
-      });
+      };
+
+      const messageThreadId = message.threadId || threadId;
+
+      if (messageThreadId && messageThreadId.trim() !== "") {
+        message.threadId = messageThreadId;
+        query.threadId = messageThreadId;
+      }
+      
+      const existingMessage = await Message.findOne(query);
 
       if (existingMessage) {
         console.log(`Updating existing message: ${message.subject}`);
@@ -111,7 +117,7 @@ const fetchAndSaveMessages = async (account, criteria) => {
         lastFetchTimestamp,
         BATCH_SIZE
       );
-    } else if (accountObj.type === "imap") {
+    } else if (accountObj.type === "imap" || accountObj.type === "smtp") {
       if (
         !accountObj.imap ||
         !accountObj.imap.host ||
@@ -159,6 +165,8 @@ const fetchAndSaveThreads = async (account, criteria) => {
       throw new Error('Account object missing "type" property');
     }
 
+    let threadList = await axios.get(`${process.env.BACKEND_BASE_URL}/track/track-email/${accountObj.email}`)
+
     console.log(
       `🔍 Processing message fetch for ${accountObj.type} account: ${accountObj.email}`
     );
@@ -176,6 +184,7 @@ const fetchAndSaveThreads = async (account, criteria) => {
         throw new Error("Gmail account missing OAuth credentials");
       }
       await fetchAndSaveGmailThreads(
+        threadList.data.data,
         accountObj,
         lastFetchTimestamp,
         BATCH_SIZE
@@ -193,7 +202,7 @@ const fetchAndSaveThreads = async (account, criteria) => {
         lastFetchTimestamp,
         BATCH_SIZE
       );
-    } else if (accountObj.type === "imap") {
+    } else if (accountObj.type === "imap" || accountObj.type === "smtp") {
       if (
         !accountObj.imap ||
         !accountObj.imap.host ||
@@ -219,7 +228,7 @@ const fetchAndSaveThreads = async (account, criteria) => {
 
     return allMessages;
   } catch (err) {
-    console.error(`❌ Error in fetchAndSaveMessages: ${err.message}`);
+    console.error(`❌ Error in fetchAndSaveThreads: ${err.message}`);
     throw err;
   }
 };
@@ -259,76 +268,118 @@ const fetchAndSaveGmailMessages = async (
 
     const listParams = { userId: "me", maxResults: batchSize };
 
-    if (lastFetchTimestamp) {
-      const timestampSeconds = Math.floor(lastFetchTimestamp.getTime() / 1000);
+    // Build query with lastFetchTimestamp if valid
+    if (lastFetchTimestamp && lastFetchTimestamp instanceof Date && !isNaN(lastFetchTimestamp.getTime())) {
+      // Subtract 60 seconds to avoid missing emails due to clock skew
+      const adjustedTimestamp = new Date(lastFetchTimestamp.getTime() - 60000);
+      const timestampSeconds = Math.floor(adjustedTimestamp.getTime() / 1000);
       listParams.q = `after:${timestampSeconds}`;
+      console.log(`📧 Gmail fetch query: after:${timestampSeconds} (${adjustedTimestamp.toISOString()})`);
+    } else {
+      console.log(`📧 Gmail fetch: No valid lastFetchTimestamp, fetching all messages`);
     }
 
     let nextPageToken = null;
+    let totalFetched = 0;
 
     do {
       if (nextPageToken) {
         listParams.pageToken = nextPageToken;
       }
+      
+      console.log(`📧 Fetching Gmail messages batch...`);
       const res = await gmail.users.messages.list(listParams);
       const messageIds = res.data.messages || [];
-      if (messageIds.length === 0) break;
+      
+      if (messageIds.length === 0) {
+        console.log(`📧 No messages found in this batch`);
+        break;
+      }
+      
+      console.log(`📧 Found ${messageIds.length} message IDs, fetching details...`);
       const messages = [];
-      for (const msg of messageIds) {
-        const msgRes = await gmail.users.messages.get({
-          userId: "me",
-          id: msg.id,
-          format: "full",
-        });
+      
+      // Fetch messages in parallel batches of 10 for better performance
+      const PARALLEL_BATCH_SIZE = 10;
+      for (let i = 0; i < messageIds.length; i += PARALLEL_BATCH_SIZE) {
+        const batch = messageIds.slice(i, i + PARALLEL_BATCH_SIZE);
+        const batchResults = await Promise.all(
+          batch.map((msg) =>
+            gmail.users.messages.get({
+              userId: "me",
+              id: msg.id,
+              format: "full",
+            })
+          )
+        );
 
-        const headers = msgRes.data.payload.headers.reduce((acc, header) => {
-          acc[header.name.toLowerCase()] = header.value;
-          return acc;
-        }, {});
+        for (const msgRes of batchResults) {
+          const headers = msgRes.data.payload.headers.reduce((acc, header) => {
+            acc[header.name.toLowerCase()] = header.value;
+            return acc;
+          }, {});
 
-        const parseEmail = (emailString) => {
-          if (!emailString) return [];
-          return emailString.split(",").map((email) => {
-            const match = email.match(/(.*)<(.*)>/);
-            return match
-              ? { name: match[1].trim(), address: match[2].trim() }
-              : { address: email.trim() };
-          });
-        };
+          const parseEmail = (emailString) => {
+            if (!emailString) return [];
+            return emailString.split(",").map((email) => {
+              const match = email.match(/(.*)<(.*)>/);
+              return match
+                ? { name: match[1].trim(), address: match[2].trim() }
+                : { address: email.trim() };
+            });
+          };
 
-        let messageMailbox = inboxMailbox;
-        if (msgRes.data.labelIds && msgRes.data.labelIds.length > 0) {
-          const matchedMailbox = accountMailboxes.find((mb) =>
-            msgRes.data.labelIds.includes(mb.path)
-          );
-          if (matchedMailbox) {
-            messageMailbox = matchedMailbox;
+          let messageMailbox = inboxMailbox;
+          if (msgRes.data.labelIds && msgRes.data.labelIds.length > 0) {
+            const matchedMailbox = accountMailboxes.find((mb) =>
+              msgRes.data.labelIds.includes(mb.path)
+            );
+            if (matchedMailbox) {
+              messageMailbox = matchedMailbox;
+            }
           }
-        }
 
-        messages.push({
-          account: account._id,
-          mailbox: messageMailbox._id,
-          uid: msg.id,
-          subject: headers.subject || "",
-          from: parseEmail(headers.from),
-          to: parseEmail(headers.to),
-          date: new Date(parseInt(msgRes.data.internalDate)),
-          body: getEmailBody(msgRes.data.payload) || msgRes.data.snippet || "",
-          flags: msgRes.data.labelIds || [],
-          headers,
-        });
+          const messageId = headers["message-id"] || msgRes.data.id;
+          const inReplyTo = headers["in-reply-to"] || null;
+          const references = headers["references"]
+            ? headers["references"].split(/\s+/)
+            : [];
+
+          messages.push({
+            account: account._id,
+            mailbox: messageMailbox._id,
+            uid: msgRes.data.id,
+            threadId: msgRes.data.threadId,
+            messageId,
+            inReplyTo,
+            references,
+            subject: headers.subject || "",
+            from: parseEmail(headers.from),
+            to: parseEmail(headers.to),
+            date: new Date(parseInt(msgRes.data.internalDate)),
+            body: getEmailBody(msgRes.data.payload) || msgRes.data.snippet || "",
+            flags: msgRes.data.labelIds || [],
+            headers,
+          });
+        }
       }
 
       await saveMessagesToDatabase(account._id, messages);
+      totalFetched += messages.length;
+      console.log(`📧 Saved ${messages.length} messages (total: ${totalFetched})`);
+      
       nextPageToken = res.data.nextPageToken;
     } while (nextPageToken);
+
+    console.log(`✅ Gmail fetch complete: ${totalFetched} messages processed`);
+    return totalFetched;
   } catch (error) {
-    console.error("Error fetching Gmail messages:", error.message);
+    console.error("❌ Error fetching Gmail messages:", error.message);
     throw error;
   }
 };
-const fetchAndSaveGmailThreads = async (account, lastFetchTimestamp, batchSize) => {
+
+const fetchAndSaveGmailThreads = async (threadList, account, lastFetchTimestamp, batchSize) => {
   try {
     const accessToken = await refreshOAuthToken(account);
     if (!accessToken) throw new Error("Failed to refresh OAuth token for Gmail");
@@ -357,16 +408,34 @@ const fetchAndSaveGmailThreads = async (account, lastFetchTimestamp, batchSize) 
 
     let nextPageToken = null;
 
+    // Get all existing UIDs to skip duplicates
+    const existingUids = new Set(
+      await Message.distinct("uid", { account: account._id })
+    );
+
     do {
       if (nextPageToken) listParams.pageToken = nextPageToken;
 
       const res = await gmail.users.threads.list(listParams);
+      if (!Array.isArray(res.data.threads)) {
+
+        console.warn("⚠ Gmail API returned non-array threads:", res.data.threads);
+      }
       const threads = res.data.threads || [];
       if (threads.length === 0) break;
 
       const messagesToSave = [];
 
+
+      const threadSet = new Set(threadList)
+      console.warn(threads, "hello")
+
       for (const thread of threads) {
+
+        if (!threadSet.has(thread.id)) {
+          continue;
+        }
+
         const threadRes = await gmail.users.threads.get({
           userId: "me",
           id: thread.id,
@@ -374,6 +443,10 @@ const fetchAndSaveGmailThreads = async (account, lastFetchTimestamp, batchSize) 
         });
 
         for (const msg of threadRes.data.messages) {
+          if (existingUids.has(msg.id)) {
+            continue;
+          }
+
           const headers = msg.payload.headers.reduce((acc, header) => {
             acc[header.name.toLowerCase()] = header.value;
             return acc;
@@ -397,7 +470,6 @@ const fetchAndSaveGmailThreads = async (account, lastFetchTimestamp, batchSize) 
             if (matchedMailbox) messageMailbox = matchedMailbox;
           }
 
-          // ✅ Extract reply relationships
           const messageId = headers["message-id"] || msg.id;
           const inReplyTo = headers["in-reply-to"] || null;
           const references = headers["references"]
@@ -409,9 +481,9 @@ const fetchAndSaveGmailThreads = async (account, lastFetchTimestamp, batchSize) 
             mailbox: messageMailbox._id,
             uid: msg.id,
             threadId: msg.threadId,
-            messageId,                  // Unique ID for email
-            inReplyTo,                  // Parent email ID (if this is a reply)
-            references,                 // Full chain of referenced messages
+            messageId,
+            inReplyTo,
+            references,
             subject: headers.subject || "",
             from: parseEmail(headers.from),
             to: parseEmail(headers.to),
@@ -420,21 +492,37 @@ const fetchAndSaveGmailThreads = async (account, lastFetchTimestamp, batchSize) 
             flags: msg.labelIds || [],
             headers,
           });
+
+          existingUids.add(msg.id); // mark as saved to skip later
         }
       }
 
-      // ✅ Save all messages with parent-child metadata
-      await saveMessagesToDatabase(account._id, messagesToSave,messagesToSave[0].threadId);
+      // ✅ Save using upsert to avoid duplicate key errors
+      for (const msg of messagesToSave) {
+        try {
+          const ParentThread = await Message.findOne({ threadId: msg.threadId, inReplyTo: null })
+          if (ParentThread) {
+            await Message.findByIdAndUpdate(ParentThread._id, { $addToSet: { flags: "UNREAD" } })
+          }
+          await Message.updateOne(
+            { account: account._id, uid: msg.uid },
+            { $set: msg },
+            { upsert: true }
+          );
+        } catch (err) {
+          console.error(`Failed to save message UID: ${msg.uid}`, err.message);
+        }
+      }
+
       nextPageToken = res.data.nextPageToken;
 
     } while (nextPageToken);
 
   } catch (error) {
-    console.error("Error fetching Gmail threads:", error.message);
+    console.error("❌ Error fetching Gmail threads:", error.message);
     throw error;
   }
 };
-
 
 const getEmailBody = (payload) => {
   if (!payload) return null;
@@ -442,11 +530,11 @@ const getEmailBody = (payload) => {
   if (payload.body && payload.body.data) {
     return Buffer.from(payload.body.data, 'base64').toString('utf-8');
   }
-  
+
   if (payload.parts && payload.parts.length) {
     let textPlain = '';
     let textHtml = '';
-    
+
     const findBodyParts = (parts) => {
       for (const part of parts) {
         const mimeType = part.mimeType;
@@ -457,18 +545,18 @@ const getEmailBody = (payload) => {
             textHtml = Buffer.from(part.body.data, 'base64').toString('utf-8');
           }
         }
-        
+
         if (part.parts && part.parts.length) {
           findBodyParts(part.parts);
         }
       }
     };
-    
+
     findBodyParts(payload.parts);
-    
+
     return textHtml || textPlain;
   }
-  
+
   return null;
 };
 
@@ -482,11 +570,11 @@ const fetchAndSaveOutlookMessages = async (
     if (!tokens.access_token) {
       throw new Error("Failed to refresh OAuth token for Outlook");
     }
-    
+
     const accessToken = tokens.access_token;
 
     const accountMailboxes = await Mailbox.find({ account: account._id });
-    
+
     if (accountMailboxes.length === 0) {
       console.log("No mailboxes found for this account. Refreshing mailboxes first...");
       await fetchAndSaveMailboxes(account);
@@ -497,9 +585,9 @@ const fetchAndSaveOutlookMessages = async (
       accountMailboxes.push(...refreshedMailboxes);
     }
 
-    let inboxMailbox = accountMailboxes.find((mb) => 
+    let inboxMailbox = accountMailboxes.find((mb) =>
       mb.name === "Inbox" || mb.name.toLowerCase() === "inbox" || mb.path === "inbox");
-      
+
     if (!inboxMailbox && accountMailboxes.length > 0) {
       inboxMailbox = accountMailboxes[0];
     } else if (!inboxMailbox) {
@@ -522,7 +610,7 @@ const fetchAndSaveOutlookMessages = async (
       try {
         console.log(`Fetching messages from ${mailbox.name} mailbox (path: ${mailbox.path})`);
         totalAttempted++;
-        
+
         let folderPath = mailbox.path;
         if (mailbox.name === "Inbox" || mailbox.name.toLowerCase() === "inbox") {
           folderPath = "inbox";
@@ -533,14 +621,14 @@ const fetchAndSaveOutlookMessages = async (
         } else if (mailbox.name === "Deleted Items" || mailbox.name === "Trash" || mailbox.name.toLowerCase().includes("deleted")) {
           folderPath = "deleteditems";
         }
-        
+
         let filter = '';
         if (lastFetchTimestamp) {
           const formattedDate = lastFetchTimestamp.toISOString();
           filter = `receivedDateTime gt ${formattedDate}`;
           console.log(`Filtering messages received after: ${formattedDate}`);
         }
-        
+
         const response = await outlookService.getOutlookMessages(
           accessToken,
           folderPath,
@@ -548,36 +636,37 @@ const fetchAndSaveOutlookMessages = async (
           0,
           filter
         );
-        
+
         const messages = response.messages || [];
         if (messages.length === 0) {
           console.log(`No messages found in ${mailbox.name} (path: ${folderPath})`);
           continue;
         }
-        
+
         console.log(`📥 Found ${messages.length} messages in ${mailbox.name}`);
-        
+
         const formattedMessages = messages.map((msg) => {
           return {
             account: account._id,
             mailbox: mailbox._id,
-            conversationId: msg.conversationId, 
-            messageId: msg.internetMessageId,   
-            inReplyTo: msg.inReplyTo,  
+            threadId: msg.conversationId, // Map Outlook conversationId to threadId
+            conversationId: msg.conversationId,
+            messageId: msg.internetMessageId,
+            inReplyTo: msg.inReplyTo,
             uid: msg.id,
             subject: msg.subject || "",
-            from: msg.from ? [{ 
+            from: msg.from ? [{
               name: msg.from.emailAddress.name,
               address: msg.from.emailAddress.address
             }] : [],
-            to: msg.toRecipients 
+            to: msg.toRecipients
               ? msg.toRecipients.map(r => ({
-                  name: r.emailAddress.name,
-                  address: r.emailAddress.address
-                }))
+                name: r.emailAddress.name,
+                address: r.emailAddress.address
+              }))
               : [],
             date: new Date(msg.receivedDateTime),
-            body: "", 
+            body: "",
             isRead: msg.isRead || false,
             hasAttachments: msg.hasAttachments || false,
           };
@@ -597,16 +686,16 @@ const fetchAndSaveOutlookMessages = async (
             }
           }
         }
-        
+
         await saveMessagesToDatabase(account._id, formattedMessages);
         totalSaved += formattedMessages.length;
         console.log(`Saved ${formattedMessages.length} messages from ${mailbox.name}`);
-        
+
         await Mailbox.findByIdAndUpdate(mailbox._id, {
           totalMessages: mailbox.totalMessages + formattedMessages.length,
           updatedAt: new Date()
         });
-        
+
         if (response.hasMoreMessages && response.nextLink) {
           console.log(`More messages available in ${mailbox.name}, but skipping for now`);
         }
@@ -614,7 +703,7 @@ const fetchAndSaveOutlookMessages = async (
         console.error(`Error fetching messages from ${mailbox.name}: ${error.message}`);
       }
     }
-    
+
     if (totalSaved === 0 && totalAttempted > 0) {
       console.warn(`No messages saved from ${totalAttempted} mailboxes. This may indicate an issue with folder IDs.`);
     } else {
@@ -696,10 +785,32 @@ const fetchAndSaveIMAPMessages = async (
             console.log(`Found email: ${msg.envelope.subject}`);
 
             const parsedMessage = await simpleParser(msg.source);
+
+            // Derive thread ID from IMAP headers
+            // Use In-Reply-To if available, otherwise use first References header, otherwise use Message-ID
+            let threadId = null;
+            if (parsedMessage.inReplyTo) {
+              threadId = parsedMessage.inReplyTo;
+            } else if (parsedMessage.references && parsedMessage.references.length > 0) {
+              // Use the first reference (original message) as thread ID
+              threadId = Array.isArray(parsedMessage.references)
+                ? parsedMessage.references[0]
+                : parsedMessage.references;
+            } else if (parsedMessage.messageId) {
+              // If no reply/reference, use own message ID as thread ID (start of new thread)
+              threadId = parsedMessage.messageId;
+            }
+
             batchMessages.push({
               account: account._id,
               mailbox: mailbox._id,
               uid: msg.uid,
+              threadId: threadId,
+              messageId: parsedMessage.messageId,
+              inReplyTo: parsedMessage.inReplyTo,
+              references: Array.isArray(parsedMessage.references)
+                ? parsedMessage.references
+                : parsedMessage.references ? [parsedMessage.references] : [],
               subject: parsedMessage.subject || "",
               from: parsedMessage.from?.value || [],
               to: parsedMessage.to?.value || [],
@@ -727,4 +838,4 @@ const fetchAndSaveIMAPMessages = async (
   }
 };
 
-module.exports = { fetchAndSaveMessages,fetchAndSaveThreads };
+module.exports = { fetchAndSaveMessages, fetchAndSaveThreads };

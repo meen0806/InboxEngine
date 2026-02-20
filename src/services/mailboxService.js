@@ -140,7 +140,7 @@ const fetchAndSaveMessages = async (account, criteria) => {
         }
       } catch (err) {
         console.error(
-          `❌ Error processing mailbox ${mailbox.path}: ${err.message}`
+          `Error processing mailbox ${mailbox.path}: ${err.message}`
         );
       } finally {
         if (lock) lock.release();
@@ -148,10 +148,10 @@ const fetchAndSaveMessages = async (account, criteria) => {
     }
 
     await client.logout();
-    console.log(`🎉 Finished fetching messages for account ${account.account}`);
+    console.log(`Finished fetching messages for account ${account.account}`);
   } catch (err) {
     console.error(
-      `❌ Error fetching messages for account ${account.account}: ${err.message}`
+      `Error fetching messages for account ${account.account}: ${err.message}`
     );
   }
 };
@@ -190,11 +190,11 @@ const saveMailboxes = async (accountId, mailboxes) => {
               },
             }
           );
-          console.log(`🔄 Updated mailbox: ${mailbox.name}`);
+          console.log(`Updated mailbox: ${mailbox.name}`);
         }
       } else {
         await Mailbox.create({ ...mailbox, account: accountId });
-        console.log(`✅ Saved new mailbox: ${mailbox.name}`);
+        console.log(`Saved new mailbox: ${mailbox.name}`);
       }
     }
     return mailboxes;
@@ -310,13 +310,13 @@ const fetchAndSaveIMAPMailboxes = async (accountDetails) => {
     });
 
     await client.connect();
-    console.log("✅ IMAP Connected successfully");
+    console.log("IMAP Connected successfully");
 
     const mailboxes = await client.list();
     const mailboxDocuments = [];
 
     for (const mailbox of mailboxes) {
-      console.log(`📂 Checking mailbox: ${mailbox.name}`);
+      console.log(`Checking mailbox: ${mailbox.name}`);
 
       try {
         await client.mailboxOpen(mailbox.path);
@@ -347,7 +347,7 @@ const fetchAndSaveIMAPMailboxes = async (accountDetails) => {
   } finally {
     if (client) {
       await client.logout();
-      console.log("📭 IMAP Connection closed.");
+      console.log("IMAP Connection closed.");
     }
   }
 };

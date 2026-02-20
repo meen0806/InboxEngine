@@ -61,7 +61,7 @@ const verifyAccountOutlook = async ({ imap, smtp, accessToken }) => {
   }
 };
 
-const verifyAccountCredentials = async ({ imap, smtp, proxy, smtpEhloName }) => {
+const verifyAccountCredentials = async ({ imap, smtp, proxy, smtpEhloName ,replyTo}) => {
   if (!imap || !smtp) {
     throw new Error("IMAP and SMTP configurations are required for verification");
   }
@@ -83,11 +83,15 @@ const verifyAccountCredentials = async ({ imap, smtp, proxy, smtpEhloName }) => 
     await transporter.verify();
     console.log("✅ SMTP Connection Verified");
 
+    const replyToEmail =
+    replyTo?.trim().toLowerCase() || smtp.auth.user;
+
     const mailOptions = {
       from: smtp.auth.user,
       to: "priyalgeitpl@gmail.com",
       subject: "SMTP Test Email",
       text: "This is a test email sent using SMTP with Nodemailer.",
+      replyTo: replyToEmail,
     };
 
     const emailResponse = await transporter.sendMail(mailOptions);

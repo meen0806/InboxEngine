@@ -1,13 +1,13 @@
-const { generateAuthUrl, getTokens } = require('../services/oauthService');
+const { generateAuthUrl, getAccount } = require('../services/oauthService');
 const { getAccessToken } = require('../services/outlookService');
 
 exports.getAuthUrl = (req, res) => {
   try {
     const { origin, orgId } = req.query;
     const authUrl = generateAuthUrl(origin, orgId);
-    res.status(200).json({ success: true,url: authUrl });
+    res.status(200).json({ success: true, url: authUrl });
   } catch (error) {
-    res.status(500).json({success: false, error: 'Failed to generate authentication URL', details: error.message });
+    res.status(500).json({ success: false, error: 'Failed to generate authentication URL', details: error.message });
   }
 };
 
@@ -36,10 +36,8 @@ exports.handleCallback = async (req, res) => {
   }
 
   try {
-    // Pass orgId to getTokens
-    const tokens = await getTokens(code, orgId);
-
-    res.redirect(`${redirectUrl}?auth_success=true&orgId=${orgId}`);
+    const account = await getAccount(code, orgId);
+    res.redirect(`${redirectUrl}?auth_success=true&orgId=${orgId}&account=${account.email}`);
   } catch (error) {
     res.status(500).json({ error: "Failed to process callback", details: error.message });
   }

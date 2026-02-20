@@ -8,7 +8,7 @@ const {
   sendEmailFromGoogle,
   sendEmailFromMicrosoft,
   sendEmailWithSMTP,
-  sendReplayFromGoogle
+  sendReplyFromGoogle
 } = require("../util/sendEmail");
 
 exports.getMailboxes = async (req, res) => {
@@ -106,14 +106,14 @@ exports.getMessageById = async (req, res) => {
   }
 };
 
-exports.getThreadById = async(req,res)=>{
-  try{
-    const {threadId, account} = req.params
-    const msg = await Message.find({threadId:threadId,account:account})
-    if(!msg) return res.status(404).json({ error: "Message not found" });
+exports.getThreadById = async (req, res) => {
+  try {
+    const { threadId, account } = req.params
+    const msg = await Message.find({ threadId: threadId, account: account })
+    if (!msg) return res.status(404).json({ error: "Message not found" });
     res.status(200).json(msg);
-  }catch(err){
-     res
+  } catch (err) {
+    res
       .status(500)
       .json({ error: "Failed to fetch message", details: err.message });
   }
@@ -126,13 +126,13 @@ exports.getThreads = async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const searchQuery = req.query.search || "";
-    let  filter =  []
+    let filter = []
 
     if (req.query.filter) {
-    filter = Array.isArray(req.query.filter) ? req.query.filter : JSON.parse(req.query.filter);
-  } else if (req.query.filters) { // handle 'filters' as well
-    filter = Array.isArray(req.query.filters) ? req.query.filters : JSON.parse(req.query.filters);
-  }
+      filter = Array.isArray(req.query.filter) ? req.query.filter : JSON.parse(req.query.filter);
+    } else if (req.query.filters) { // handle 'filters' as well
+      filter = Array.isArray(req.query.filters) ? req.query.filters : JSON.parse(req.query.filters);
+    }
 
     if (page <= 0 || limit <= 0) {
       return res.status(400).json({
@@ -144,25 +144,37 @@ exports.getThreads = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const query = {
-      $and: [{ account: account }] 
+      $and: [{ account: account }]
     };
 
     if (searchQuery) {
-      query.$and.push ({$or:[
-        { subject: { $regex: searchQuery, $options: "i" } },
-        { body: { $regex: searchQuery, $options: "i" } },
-        { "from.name": { $regex: searchQuery, $options: "i" } },
-        { "from.address": { $regex: searchQuery, $options: "i" } }
-      ]})
+      query.$and.push({
+        $or: [
+          { subject: { $regex: searchQuery, $options: "i" } },
+          { body: { $regex: searchQuery, $options: "i" } },
+          { "from.name": { $regex: searchQuery, $options: "i" } },
+          { "from.address": { $regex: searchQuery, $options: "i" } }
+        ]
+      })
     }
 
 
-      filter.forEach(fil => {
-        const f = fil.toLowerCase().replace(" ","")
-        console.log(f)
+    filter.forEach(fil => {
+      const f = fil.toLowerCase().replace(" ", "")
+      console.log(f)
       if (f === "allreplies") query.$and.push({ inReplyTo: { $exists: true, $ne: null } });
       if (f === "unreadonly") query.$and.push({ flags: { $in: ["UNREAD"] } });
       if (f === "byuser") query.$and.push({ flags: { $in: ["SENT"] } });
+      if (f === "withoutthreadid") {
+        // Filter for messages without threadId (null, undefined, or empty string)
+        query.$and.push({
+          $or: [
+            { threadId: { $exists: false } },
+            { threadId: null },
+            { threadId: "" }
+          ]
+        });
+      }
     });
 
     // 🔹 Default behavior when no filter applied
@@ -178,6 +190,15 @@ exports.getThreads = async (req, res) => {
 
     const totalMessages = await Message.countDocuments(query);
 
+    const messagesWithoutThreadId = await Message.countDocuments({
+      account: account,
+      $or: [
+        { threadId: { $exists: false } },
+        { threadId: null },
+        { threadId: "" }
+      ]
+    });
+
     const totalPages = Math.ceil(totalMessages / limit);
 
     return res.status(200).json({
@@ -189,6 +210,9 @@ exports.getThreads = async (req, res) => {
         totalPages: totalPages || 1,
         currentPage: page,
         hasMore: page < totalPages,
+        statistics: {
+          messagesWithoutThreadId: messagesWithoutThreadId
+        }
       },
     });
   } catch (err) {
@@ -263,6 +287,11 @@ exports.loadMessages = async (req, res) => {
       return res.status(404).json({ error: "❌ Account not found" });
     }
 
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    accountData.lastFetchTimestamp = thirtyDaysAgo;
+
     const messages = await fetchAndSaveMessages(accountData, criteria);
 
     res
@@ -276,24 +305,24 @@ exports.loadMessages = async (req, res) => {
   }
 };
 
-exports.loadThreads = async (req,res)=>{
-  try{
-    const {account} = req.params;
-    const {criteria} = req.body;
+exports.loadThreads = async (req, res) => {
+  try {
+    const { account } = req.params;
+    const { criteria } = req.body;
 
     const accountData = await Account.findById(account)
-    if(!accountData){
+    if (!accountData) {
       return res.status(404).json({ error: "❌ Account not found" })
     }
-    const thread = await fetchAndSaveThreads(account,criteria)
+    const thread = await fetchAndSaveThreads(account, criteria)
 
     res
       .status(200)
       .json({ message: "✅ Messages loaded successfully", thread });
 
-  }catch(err){
-    console.err("❌ Error loading messages:", err.message)
-    res.status(500).json({ error: "❌ Failed to load messages", details: err.message });
+  } catch (err) {
+    console.err("❌ Error loading threads:", err.message)
+    res.status(500).json({ error: "❌ Failed to load threads", details: err.message });
   }
 }
 
@@ -310,7 +339,7 @@ exports.loadMailbox = async (req, res) => {
     // Fetch and save mailboxes for the account
     const mailboxes = await fetchAndSaveMailboxes(accountDetails);
 
-    res.status(201).json({ success: true, mailboxes ,MESSAGE:Mailbox});
+    res.status(201).json({ success: true, mailboxes, MESSAGE: Mailbox });
   } catch (error) {
     res.status(500).json({
       error: "Failed to fetch and save mailboxes",
@@ -321,6 +350,7 @@ exports.loadMailbox = async (req, res) => {
 
 exports.sendTestEmail = async (req, res) => {
   const { email, toEmail, emailTemplate } = req.body;
+
   if (!email) {
     return res.status(400).json({ message: "Email is required" });
   }
@@ -350,10 +380,10 @@ exports.sendTestEmail = async (req, res) => {
         account.email,
         toEmail,
         expiryTime,
-        account,
-        emailTemplate
+        emailTemplate,
+        account
       );
-    } else if (account.type === "imap") {
+    } else if (account.type === "imap" || account.type === "smtp") {
       await sendEmailWithSMTP(account, toEmail, emailTemplate);
     } else {
       return res.status(400).json({ message: "Unsupported email provider" });
@@ -371,29 +401,59 @@ async function runDeliveryTest(deliveryTest) {
   return { success: true, message: `Delivery test ${deliveryTest} successful` };
 }
 
-exports.SendReplyEmail = async(req,res)=>{
-  try{
-    const {to,from, emailTemplate,messageId ,threadId} = req.body;
+exports.sendReplyEmail = async (req, res) => {
+  try {
+    const { to, emailTemplate, messageId, threadId, accountId } = req.body;
 
-    // now find the accounts
-    const account = await Account.findOne({email:from.address})
-     if (!account) {
+    const account = await Account.findOne({ _id: accountId });
+    if (!account) {
       return res.status(404).json({ error: "Account not found" });
     }
 
-    const message = await Message.findOne({messageId:messageId})
+    const message = await Message.findOne({ messageId: messageId })
 
-    const accessToken  = account?.oauth2?.tokens?.access_token
-    let expiryTime = account?.oauth2?.tokens?.expiry_date;
-
-    if(account.type ==="gmail"){
-      await sendReplayFromGoogle(accessToken,from.address,to.address,expiryTime,account,emailTemplate,messageId,threadId,from.name,to.name,message.uid)
+    if (account.type === "gmail") {
+      await sendReplyFromGoogle(to.address, account, emailTemplate, messageId, threadId, to.name, message.uid)
     }
-    return res
-      .status(200)
-      .json({ code: 200, message: "Email sent successfully" });
+    return res.status(200).json({ code: 200, message: "Email sent successfully" });
 
-  }catch(err){
-    return res.status(500).json({code:500,message:err.message})
+  } catch (err) {
+    return res.status(500).json({ code: 500, message: err.message })
+  }
+}
+
+
+exports.MarkThreadReaded = async (req, res) => {
+  try {
+    const { threadId } = req.body
+
+    if (threadId) {
+      await Message.find({ threadId: threadId })
+      await Message.updateMany({ threadId },
+        { $pull: { flags: "UNREAD" } }
+      )
+
+      res.status(200).json({ code: 200, message: "Thread Readed sucessful" })
+    } else {
+      res.status(400).json({ code: 400, message: "ThreadId not found" })
+    }
+
+  } catch (err) {
+    return res.status(500).json({ code: 500, message: err.message })
+  }
+}
+
+exports.loadInboxMessages = async (req, res) => {
+  try {
+    const { account } = req.params;
+    const result = await fetchAndSaveMessages(account, {});
+    return res.status(200).json({ 
+      code: 200, 
+      message: "Messages loaded successfully",
+      data: result 
+    });
+  } catch (err) {
+    console.error("❌ loadInboxMessages error:", err.message);
+    return res.status(500).json({ code: 500, message: err.message });
   }
 }

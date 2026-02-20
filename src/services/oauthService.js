@@ -35,7 +35,7 @@ const generateAuthUrl = (origin = null, orgId) => {
   );
 };
 
-const getTokens = async (code, orgId) => {
+const getAccount = async (code, orgId) => {
   const Account = mongoose.model("Account");
 
   try {
@@ -53,7 +53,7 @@ const getTokens = async (code, orgId) => {
         name: userInfo.name,
         account: userInfo.email,
         type: "gmail",
-        // state: "connected",
+        state: "active",
         oauth2: {
           authorize: true,
           clientId: process.env.GOOGLE_CLIENT_ID,
@@ -82,7 +82,7 @@ const getTokens = async (code, orgId) => {
     account.orgId = orgId;
     await account.save();
 
-    return tokens;
+    return account;
   } catch (error) {
     throw new Error(`Failed to exchange code for tokens: ${error.message}`);
   }
@@ -130,7 +130,17 @@ const refreshOAuthToken = async (account) => {
       throw new Error("OAuth token refresh failed: No access token received.");
     }
 
-    account.oauth2.tokens = {
+    // If account is a plain object (from .lean()), fetch it as a Mongoose document
+    let accountDoc = account;
+    if (typeof account.save !== 'function') {
+      const Account = mongoose.model("Account");
+      accountDoc = await Account.findById(account._id);
+      if (!accountDoc) {
+        throw new Error("Account not found when refreshing token");
+      }
+    }
+
+    accountDoc.oauth2.tokens = {
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token || oauth2.tokens.refresh_token,
       scope: tokens.scope,
@@ -138,14 +148,14 @@ const refreshOAuthToken = async (account) => {
       expiry_date: Date.now() + tokens.expires_in * 1000,
     };
 
-    await account.save();
-    console.log("✅ Token refreshed successfully:", account.oauth2.tokens);
+    await accountDoc.save();
+    console.log("✅ Token refreshed successfully:", accountDoc.oauth2.tokens);
     
-    return tokens.access_token;
+    return accountDoc;
   } catch (err) {
-    console.error("❌ Failed to refresh OAuth token:", err.response?.data || err.message);
+    console.error("Failed to refresh OAuth token:", err.response?.data || err.message);
     throw new Error(`Failed to refresh OAuth token: ${err.message}`);
   }
 };
 
-module.exports = { generateAuthUrl, getTokens, refreshOAuthToken };
+module.exports = { generateAuthUrl, getAccount, refreshOAuthToken };

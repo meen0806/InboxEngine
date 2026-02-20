@@ -6,15 +6,29 @@ const accountSchema = new mongoose.Schema({
   account: { type: String },
   name: { type: String, required: true },
   email: { type: String },
+  replyTo: {
+    type: String,
+    required: false,
+    trim: true,
+    lowercase: true,
+    validate: {
+      validator: function (value) {
+        if (!value) return true;
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+      },
+      message: "Invalid replyTo email format",
+    },
+  },
   orgId: { type: String, required: true },
-  type: { type: String, enum: ["imap", "gmail", "outlook"], required: true },
-  state: { type: String, enum: ["init", "connected", "error"] },
+  type: { type: String, enum: ["smtp", "gmail", "outlook", "imap"], required: true },
+  state: { type: String, enum: ["active", "inactive", "verified", "unverified", "pending", "disabled", "deleted", "reauth_required"] },
   path: [{ type: String }],
   subconnections: [{ type: String }],
   webhooks: { type: String },
   copy: { type: Boolean },
-  limit: { type: Number },
-  time_gap: { type: Number },
+  limit: { type: Number, default: 0 },
+  time_gap: { type: Number, default: 0 },
+  last_sent: { type: Date, default: null },
   logs: { type: Boolean, default: false },
   notifyFrom: { type: Date, default: Date.now },
   lastFetchTimestamp: { type: Date, default: null },
@@ -136,6 +150,23 @@ const accountSchema = new mongoose.Schema({
   tz: { type: String },
   accessToken: { type: String },
   refreshToken: { type: String },
+  warmup: {
+    enabled: { type: Boolean, default: false },
+    maxEmailPerDay: { type: Number, default: 20 },
+    warmupMaxCount: { type: Number, default: 0 },
+    warmupMinCount: { type: Number, default: 20 },
+    isRampupEnabled: { type: Boolean, default: false },
+    rampupIncrement: { type: Number, default: 5 },
+    startDate: { type: Date, default: null },
+    replyRate: { type: Number, default: 20, min: 0, max: 100 }, // Reply Rate (%) - Suggested 20, Maximum 100
+    dailyReplyTarget: { type: Number, default: 0 }, // Daily Target for Replies to Inbound Warmup Emails (min: maxEmailPerDay, max: 100/all)
+    identifierTag: { type: String, default: "" }, // Custom Warmup Identifier Tag (two-worded tag like "where-final")
+    autoAdjust: { type: Boolean, default: false }, // Enable Auto-adjust warmup/sending ratio
+    customDomainTracking: { type: Boolean, default: false }, // Warmup the Custom Domain tracking Link
+    weekdaysOnly: { type: Boolean, default: false }, // Send warmup emails only on weekdays
+    reputation: { type: Number, default: 100, min: 0, max: 100 }, // Email reputation score (0-100)
+    reputationLastCalculated: { type: Date, default: null },
+  },
   createdAt: { type: Date, default: Date.now },
 });
 
@@ -144,7 +175,7 @@ accountSchema.pre("save", async function (next) {
     const result = await verifyAccountCallback(this);
 
     if (result.success) {
-      this.state = "connected";
+      this.state = "active";
     } else {
       this.state = "error";
       this.smtpEhloName = result.message;
@@ -166,7 +197,7 @@ accountSchema.post("save", async function (account) {
     const hasImapCredentials =
       account.imap && account.imap.auth && account.imap.auth.user;
 
-    if (account.state === "connected") {
+    if (account.state === "active") {
       try {
         const { fetchAndSaveMailboxes } = require("../services/mailboxService");
 
@@ -179,7 +210,7 @@ accountSchema.post("save", async function (account) {
             `⚠️ Skipping mailbox/message fetch for ${account.email}: Missing OAuth credentials`
           );
           return;
-        } else if (account.type === "imap" && !hasImapCredentials) {
+        } else if ((account.type === "imap" || account.type === "smtp") && !hasImapCredentials) {
           console.log(
             `⚠️ Skipping mailbox/message fetch for ${account.email}: Missing IMAP credentials`
           );
@@ -213,7 +244,7 @@ accountSchema.post("save", async function (account) {
               `🔄 Starting background fetch of messages for ${refreshedAccount.type} account: ${refreshedAccount.email}`
             );
 
-            await messageService.fetchAndSaveThreads(refreshedAccount, {});
+            await messageService.fetchAndSaveMessages(refreshedAccount, {});
 
             console.log(
               `✅ Successfully completed background fetch of messages for account: ${refreshedAccount.email}`
