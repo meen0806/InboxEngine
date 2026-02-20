@@ -201,10 +201,15 @@ const sendEmailWithSMTP = async (account, toEmail, emailTemplate) => {
     },
   });
 
+  const replyToEmail =
+  account.replyTo?.trim().toLowerCase() ||
+  account.smtp.auth.user;
+
   const mailOptions = {
     from: account.smtp.auth.user,
     to: toEmail,
     subject: subjectEncoded,
+    replyTo: replyToEmail,
   };
 
   if (!sendAsPlainText) {

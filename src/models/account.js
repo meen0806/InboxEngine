@@ -6,6 +6,19 @@ const accountSchema = new mongoose.Schema({
   account: { type: String },
   name: { type: String, required: true },
   email: { type: String },
+  replyTo: {
+    type: String,
+    required: false,
+    trim: true,
+    lowercase: true,
+    validate: {
+      validator: function (value) {
+        if (!value) return true;
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+      },
+      message: "Invalid replyTo email format",
+    },
+  },
   orgId: { type: String, required: true },
   type: { type: String, enum: ["smtp", "gmail", "outlook", "imap"], required: true },
   state: { type: String, enum: ["active", "inactive", "verified", "unverified", "pending", "disabled", "deleted", "reauth_required"] },

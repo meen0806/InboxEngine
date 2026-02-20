@@ -25,7 +25,7 @@ exports.listAccounts = async (req, res) => {
 
 exports.createAccount = async (req, res) => {
   try {
-    const { email } = req.body;
+    const { email ,replyTo} = req.body;
 
     const existingAccount = await Account.findOne({ email });
     if (existingAccount) {
@@ -33,7 +33,12 @@ exports.createAccount = async (req, res) => {
         .status(400)
         .json({ code: 400, message: "Account with this email already exists" });
     }
-
+    
+    if (replyTo) {
+      req.body.replyTo = replyTo.trim().toLowerCase();
+    } else {
+      delete req.body.replyTo; 
+    }
     const newAccount = new Account(req.body);
 
     const result = await verifyAccountCallback(newAccount);
@@ -204,7 +209,7 @@ exports.deleteAccount = async (req, res) => {
 
 exports.verifyAccount = async (req, res) => {
   try {
-    const { imap, smtp, proxy, smtpEhloName } = req.body;
+    const { imap, smtp, proxy, smtpEhloName,replyTo } = req.body;
 
     if (!smtp || !smtp.auth || !smtp.auth.user || !smtp.auth.pass) {
       return res.status(400).json({ code: 400, message: "SMTP credentials are required" });
@@ -220,6 +225,7 @@ exports.verifyAccount = async (req, res) => {
       smtp,
       proxy,
       smtpEhloName,
+      replyTo
     });
 
     if (!result.success) {
